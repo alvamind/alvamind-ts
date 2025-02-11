@@ -74,6 +74,8 @@ export type BuilderInstance<
     hook: (ctx: AlvamindContext<TState, TConfig> & TDeps & TApi) => void
   ): BuilderInstance<TState, TConfig, TDeps, TApi>;
 
+  stop(): void;
+
   pipe<K extends string, V>(
     key: K,
     fn: (ctx: AlvamindContext<TState, TConfig> & TDeps & TApi) => V

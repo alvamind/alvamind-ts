@@ -13,7 +13,7 @@ import {
   TaskEither
 } from "./types";
 import { MODULE_NAME_REQUIRED, DEFAULT_CONFIG } from "./constants";
-import { createPipe } from "../utils/functional/pipe";
+import { createPipe } from "../utils/functional/pipe"; // Assuming createPipe exists
 
 export function Alvamind<
   TState extends Record<string, any> = Record<string, never>,
@@ -37,6 +37,17 @@ export function Alvamind<
   > = [];
   let isStarted = false;
 
+  // Helper function to execute hooks with current context
+  const executeHooks = (hooks: Array<Function>) => {
+    const currentContext = {
+      ...context,
+      ...Object.fromEntries(dependencies),
+      ...api,
+    };
+    hooks.forEach(hook => hook(currentContext));
+  };
+
+
   const context: AlvamindContext<TState, TConfig> = {
     state: {
       get: () => Object.freeze({ ...currentState }),
@@ -55,7 +66,7 @@ export function Alvamind<
     E,
     TE,
     O,
-    pipe: fpPipe,  // Corrected: Use fpPipe from fp-ts/function
+    pipe: fpPipe,
   };
 
   const api: Record<string, any> = {};
@@ -105,13 +116,14 @@ export function Alvamind<
       startHooks.push(hook);
       if (!isStarted) {
         isStarted = true;
-        startHooks.forEach((h) =>
-          h({
-            ...context,
-            ...Object.fromEntries(dependencies),
-            ...api,
-          })
-        );
+        executeHooks(startHooks);
+      } else {
+        // Execute just the newly added hook
+        hook({
+          ...context,
+          ...Object.fromEntries(dependencies),
+          ...api,
+        });
       }
       return builder;
     },
@@ -121,6 +133,10 @@ export function Alvamind<
     ) {
       stopHooks.push(hook);
       return builder;
+    },
+
+    stop() {
+      executeHooks(stopHooks);
     },
 
     pipe<K extends string, V>(

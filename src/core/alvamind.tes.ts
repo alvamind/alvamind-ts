@@ -104,7 +104,6 @@ describe("Alvamind Core", () => {
         },
         getCount: () => state.get().count
       }));
-
       testModule.increment();
       expect(testModule.getCount()).toBe(1);
     });
