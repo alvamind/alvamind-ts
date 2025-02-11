@@ -1,7 +1,7 @@
 // src/core/state-manager.ts
 export function createStateManager<TState extends Record<string, unknown>>(initialState: TState) {
   let currentState = initialState;
-  const watchers = new Map<keyof TState, Array<(newVal: TState[keyof TState], oldVal: TState[keyof TState]) => void>>();
+  const watchers = new Map<keyof TState, Array<(newVal: unknown, oldVal: unknown) => void>>();
 
   return {
     get: () => Object.freeze({ ...currentState }),
@@ -20,7 +20,7 @@ export function createStateManager<TState extends Record<string, unknown>>(initi
       handler: (newVal: TState[K], oldVal: TState[K]) => void
     ) => {
       const keyWatchers = watchers.get(key) || [];
-      keyWatchers.push(handler);
+      keyWatchers.push(handler as (newVal: unknown, oldVal: unknown) => void);
       watchers.set(key, keyWatchers);
     }
   };

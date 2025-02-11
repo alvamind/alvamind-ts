@@ -5,23 +5,16 @@ import { pipe } from "fp-ts/function";
 export const createPipe = <TState, TConfig>(
   context: AlvamindContext<TState, TConfig>,
   dependencies: Map<string, unknown>,
-  api: Record<string, any>
+  api: Record<string, unknown>
 ) => <K extends string, V>(
-  builder: any,
+  builder: object,
   key: K,
   fn: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) => V
-) => {
-    return pipe(
-      {
+) =>
+    Object.assign(builder, {
+      [key]: api[key] = fn({
         ...context,
         ...Object.fromEntries(dependencies),
-        ...api,
-      },
-      fn,
-      (pipedValue) => {
-        api[key] = pipedValue;
-        Object.assign(builder, { [key]: pipedValue });
-        return builder;
-      }
-    );
-  };
+        ...api
+      })
+    });

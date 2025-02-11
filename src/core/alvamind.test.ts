@@ -68,6 +68,70 @@ describe("Alvamind Core", () => {
 
       expect(userModule.createUser("Alice")).toBe("[LOG] Created user: Alice");
     });
+
+
+    describe("Circular Dependencies", () => {
+      it("should handle circular module dependencies", () => {
+        let callCount = 0;
+
+        // Module A depends on B
+        const moduleA = Alvamind({ name: "ModuleA" })
+          .derive(() => ({
+            doA: (input: string) => {
+              callCount++;
+              if (callCount > 5) return input; // Prevent infinite recursion
+              return moduleB.doB(`${input} -> A`);
+            }
+          }));
+
+        // Module B depends on A
+        const moduleB = Alvamind({ name: "ModuleB" })
+          .derive(() => ({
+            doB: (input: string) => {
+              callCount++;
+              if (callCount > 5) return input; // Prevent infinite recursion
+              return moduleA.doA(`${input} -> B`);
+            }
+          }));
+
+        // Create main module that uses both A and B
+        const mainModule = Alvamind({ name: "MainModule" })
+          .use(moduleA)
+          .use(moduleB);
+
+        const result = mainModule.doA("start");
+        expect(result).toContain("start");
+        expect(callCount).toBeGreaterThan(0);
+        expect(callCount).toBeLessThanOrEqual(6); // Verify recursion limit worked
+      });
+
+      it("should handle deep circular dependencies", () => {
+        const moduleA = Alvamind({ name: "ModuleA" })
+          .derive(() => ({
+            valueA: () => moduleB.valueB()
+          }));
+
+        const moduleB = Alvamind({ name: "ModuleB" })
+          .derive(() => ({
+            valueB: () => moduleC.valueC()
+          }));
+
+        const moduleC = Alvamind({ name: "ModuleC" })
+          .derive(() => ({
+            valueC: () => "C calls A: " + moduleA.valueA()
+          }));
+
+        const mainModule = Alvamind({ name: "MainModule" })
+          .use(moduleA)
+          .use(moduleB)
+          .use(moduleC)
+          .derive(({ valueA }) => ({
+            test: () => valueA()
+          }));
+
+        expect(() => mainModule.test()).not.toThrow();
+      });
+    })
   });
 
   describe("State Management", () => {
