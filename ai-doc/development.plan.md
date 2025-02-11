@@ -14,8 +14,6 @@ alvamind/
 │   │   │   ├── flow.ts
 │   │   │   └── composition.ts
 │   │   ├── state/            # State management utilities
-│   │   ├── types/            # Type utilities
-│   │   ├── testing/          # Testing utilities
 │   │   └── validation/       # Validation utilities
 │   ├── errors/               # Custom error types
 │   ├── testing/              # Testing framework integration
