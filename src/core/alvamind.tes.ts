@@ -1,5 +1,3 @@
-// src/core/alvamind.test.ts
-
 import { expect, test, describe, beforeAll, afterAll, beforeEach, afterEach, it } from "bun:test";
 import { Alvamind } from "./alvamind";
 import * as E from 'fp-ts/Either';
@@ -46,7 +44,7 @@ describe("Alvamind Core", () => {
     it("should inject dependencies using .use()", () => {
       const dependency = {
         helper: () => "helped"
-      } as const;
+      };
 
       const module = Alvamind({ name: "DIModule" })
         .use(dependency)
@@ -140,67 +138,16 @@ describe("Alvamind Core", () => {
             addOne: (n: number) => n + 1,
             toString: (n: number) => `Result: ${n}`
           }))
-          .pipe("process", ({ double, addOne, toString, pipe }) =>
-            (input: number) => pipe(
+          .pipe("process", ({ double, addOne, toString, pipe }) => {
+            return (input: number) => pipe(
               input,
               double,
               addOne,
               toString
-            )
-          );
+            );
+          });
 
         expect(module.process(5)).toBe("Result: 11");
-      });
-    });
-
-    describe(".chain()", () => {
-      it("should handle Either chains", () => {
-        const module = Alvamind({ name: "ChainModule" })
-          .derive(({ E }) => ({
-            validate: (n: number): E.Either<Error, number> =>
-              n > 0 ? E.right(n) : E.left(new Error("Number must be positive")),
-            double: (n: number): E.Either<Error, number> => E.right(n * 2)
-          }))
-          .chain("process", ({ validate, double, pipe, E }) =>
-            (input: number): E.Either<Error, number> => pipe(
-              validate(input),
-              E.chain(double)
-            )
-          );
-
-        const successResult = module.process(5);
-        const errorResult = module.process(-5);
-
-        expect(E.isRight(successResult)).toBe(true);
-        if (E.isRight(successResult)) {
-          expect(successResult.right).toBe(10);
-        }
-        expect(E.isLeft(errorResult)).toBe(true);
-      });
-
-      it("should handle TaskEither chains", async () => {
-        const module = Alvamind({ name: "AsyncChainModule" })
-          .derive(({ TE }) => ({
-            fetchData: (id: string): TE.TaskEither<Error, string> =>
-              TE.tryCatch(
-                () => Promise.resolve(`Data for ${id}`),
-                (error) => new Error(String(error))
-              ),
-            processData: (data: string): TE.TaskEither<Error, string> =>
-              TE.right(`Processed: ${data}`)
-          }))
-          .chain("process", ({ fetchData, processData, pipe }) =>
-            (id: string): TE.TaskEither<Error, string> => pipe(
-              fetchData(id),
-              TE.chain(processData)
-            )
-          );
-
-        const result = await module.process("123")();
-        expect(E.isRight(result)).toBe(true);
-        if (E.isRight(result)) {
-          expect(result.right).toBe("Processed: Data for 123");
-        }
       });
     });
   });
@@ -265,46 +212,6 @@ describe("Alvamind Core", () => {
 
       expect(module.dangerousOperation("test")).toBe("TEST");
       expect(module.dangerousOperation(123)).toBe("ERROR");
-    });
-
-    it("should handle errors in chain using Either", () => {
-      const module = Alvamind({ name: "EitherErrorModule" })
-        .chain("validate", ({ E }) => (input: unknown): E.Either<Error, string> => {
-          if (typeof input !== "string") {
-            return E.left(new Error("Invalid input"));
-          }
-          return E.right(input.toUpperCase());
-        });
-
-      const successResult = module.validate("test");
-      const errorResult = module.validate(123);
-
-      expect(E.isRight(successResult)).toBe(true);
-      if (E.isRight(successResult)) {
-        expect(successResult.right).toBe("TEST");
-      }
-      expect(E.isLeft(errorResult)).toBe(true);
-    });
-
-    it("should handle async errors using TaskEither", async () => {
-      const module = Alvamind({ name: "AsyncErrorModule" })
-        .chain("fetchData", ({ TE }) => (shouldFail: boolean): TE.TaskEither<Error, string> =>
-          TE.tryCatch(
-            () => shouldFail
-              ? Promise.reject(new Error("Failed"))
-              : Promise.resolve("Success"),
-            (error) => new Error(String(error))
-          )
-        );
-
-      const successResult = await module.fetchData(false)();
-      const errorResult = await module.fetchData(true)();
-
-      expect(E.isRight(successResult)).toBe(true);
-      if (E.isRight(successResult)) {
-        expect(successResult.right).toBe("Success");
-      }
-      expect(E.isLeft(errorResult)).toBe(true);
     });
   });
 });

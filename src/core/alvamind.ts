@@ -1,11 +1,10 @@
-// src/core/alvamind.ts
 
-import { pipe } from 'fp-ts/function';
-import * as E from 'fp-ts/Either';
-import * as TE from 'fp-ts/TaskEither';
-import * as O from 'fp-ts/Option';
-import type { TaskEither } from 'fp-ts/TaskEither';
-import type { Either } from 'fp-ts/Either';
+import { pipe } from "fp-ts/function";
+import * as E from "fp-ts/Either";
+import * as TE from "fp-ts/TaskEither";
+import * as O from "fp-ts/Option";
+import type { TaskEither } from "fp-ts/TaskEither";
+import type { Either } from "fp-ts/Either";
 
 export interface AlvamindOptions<TState = void, TConfig = void> {
   readonly name: string;
@@ -38,7 +37,7 @@ export type BuilderInstance<
   ): BuilderInstance<TState, TConfig, TDeps & T, TApi>;
 
   derive<T extends DependencyRecord>(
-    fn: (ctx: AlvamindContext<TState, TConfig> & TDeps) => T
+    fn: (ctx: AlvamindContext<TState, TConfig> & TDeps & TApi) => T
   ): BuilderInstance<TState, TConfig, TDeps, TApi & T> & T;
 
   decorate<K extends string, V>(
@@ -52,23 +51,17 @@ export type BuilderInstance<
   ): BuilderInstance<TState, TConfig, TDeps, TApi>;
 
   onStart(
-    hook: (context: AlvamindContext<TState, TConfig> & TDeps) => void
+    hook: (context: AlvamindContext<TState, TConfig> & TDeps & TApi) => void
   ): BuilderInstance<TState, TConfig, TDeps, TApi>;
 
   onStop(
-    hook: (context: AlvamindContext<TState, TConfig> & TDeps) => void
+    hook: (context: AlvamindContext<TState, TConfig> & TDeps & TApi) => void
   ): BuilderInstance<TState, TConfig, TDeps, TApi>;
 
-  pipe<Input, Output>(
-    name: string,
-    fn: (ctx: AlvamindContext<TState, TConfig> & TDeps & TApi) => (input: Input) => Output
-  ): BuilderInstance<TState, TConfig, TDeps, TApi & Record<typeof name, (input: Input) => Output>>;
-
-  chain<Input, Output>(
-    name: string,
-    fn: (ctx: AlvamindContext<TState, TConfig> & TDeps & TApi) =>
-      (input: Input) => Either<Error, Output> | TaskEither<Error, Output>
-  ): BuilderInstance<TState, TConfig, TDeps, TApi & Record<typeof name, (input: Input) => Either<Error, Output> | TaskEither<Error, Output>>>;
+  pipe<K extends string, V>(
+    key: K,
+    fn: (ctx: AlvamindContext<TState, TConfig> & TDeps & TApi) => V
+  ): BuilderInstance<TState, TConfig, TDeps, TApi & Record<K, V>> & Record<K, V>;
 } & TApi;
 
 export function Alvamind<
@@ -78,15 +71,21 @@ export function Alvamind<
   options: AlvamindOptions<TState, TConfig>
 ): BuilderInstance<TState, TConfig, DependencyRecord, DependencyRecord> {
   if (!options.name) {
-    throw new Error('Alvamind module must have a name');
+    throw new Error("Alvamind module must have a name");
   }
 
   let currentState = options.state as TState;
   const watchers = new Map<keyof TState, Array<(newVal: any, oldVal: any) => void>>();
   const dependencies = new Map<string, unknown>();
+
+  // Declare lifecycle hook arrays to accept the merged (extended) context.
+  const startHooks: Array<
+    (context: AlvamindContext<TState, TConfig> & Record<string, unknown>) => void
+  > = [];
+  const stopHooks: Array<
+    (context: AlvamindContext<TState, TConfig> & Record<string, unknown>) => void
+  > = [];
   let isStarted = false;
-  const startHooks: Array<(context: AlvamindContext<TState, TConfig>) => void> = [];
-  const stopHooks: Array<(context: AlvamindContext<TState, TConfig>) => void> = [];
 
   const context: AlvamindContext<TState, TConfig> = {
     state: {
@@ -94,30 +93,30 @@ export function Alvamind<
       set: (newState: TState) => {
         const oldState = currentState;
         currentState = newState;
-
-        if (watchers.size > 0) {
-          (Object.keys(newState) as Array<keyof TState>).forEach((key) => {
-            const keyWatchers = watchers.get(key);
-            if (keyWatchers && oldState[key] !== newState[key]) {
-              keyWatchers.forEach((watcher) => watcher(newState[key], oldState[key]));
-            }
-          });
-        }
+        (Object.keys(newState) as Array<keyof TState>).forEach((key) => {
+          const keyWatchers = watchers.get(key);
+          if (keyWatchers && oldState[key] !== newState[key]) {
+            keyWatchers.forEach((watcher) => watcher(newState[key], oldState[key]));
+          }
+        });
       },
     },
-    config: Object.freeze(options.config || {} as TConfig),
+    config: Object.freeze(options.config || ({} as TConfig)),
     E,
     TE,
     O,
     pipe,
   };
 
-  const builder = {
+  // api will contain all the user-defined derived and decorated values.
+  const api: Record<string, any> = {};
+
+  const builder: any = {
     use<T extends DependencyRecord>(dep: T) {
       Object.entries(dep).forEach(([key, value]) => {
         dependencies.set(key, value);
       });
-      return builder as BuilderInstance<TState, TConfig, DependencyRecord & T, DependencyRecord>;
+      return builder as BuilderInstance<TState, TConfig, DependencyRecord & T, typeof api>;
     },
 
     derive<T extends DependencyRecord>(
@@ -126,13 +125,17 @@ export function Alvamind<
       const derivedValue = fn({
         ...context,
         ...Object.fromEntries(dependencies),
+        ...api,
       });
-      return Object.assign(builder, derivedValue);
+      Object.assign(api, derivedValue);
+      Object.assign(builder, derivedValue);
+      return builder;
     },
 
     decorate<K extends string, V>(key: K, value: V) {
-      const decorated = { [key]: value } as Record<K, V>;
-      return Object.assign(builder, decorated);
+      api[key] = value;
+      Object.assign(builder, { [key]: value });
+      return builder;
     },
 
     watch<K extends keyof TState>(
@@ -145,52 +148,46 @@ export function Alvamind<
       return builder;
     },
 
-    onStart(hook: (context: AlvamindContext<TState, TConfig>) => void) {
+    onStart(
+      hook: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) => void
+    ) {
       startHooks.push(hook);
       if (!isStarted) {
         isStarted = true;
-        startHooks.forEach((h) => h(context));
+        startHooks.forEach((h) =>
+          h({
+            ...context,
+            ...Object.fromEntries(dependencies),
+            ...api,
+          })
+        );
       }
       return builder;
     },
 
-    onStop(hook: (context: AlvamindContext<TState, TConfig>) => void) {
+    onStop(
+      hook: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) => void
+    ) {
       stopHooks.push(hook);
       return builder;
     },
 
-    pipe<Input, Output>(
-      name: string,
-      fn: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) =>
-        (input: Input) => Output
+    pipe<K extends string, V>(
+      key: K,
+      fn: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) => V
     ) {
-      const pipelineFn = fn({
+      const pipedValue = fn({
         ...context,
         ...Object.fromEntries(dependencies),
+        ...api,
       });
-
-      const wrappedFn = (input: Input): Output => {
-        return pipelineFn(input);
-      };
-
-      return Object.assign(builder, { [name]: wrappedFn });
-    },
-
-    chain<Input, Output>(
-      name: string,
-      fn: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) =>
-        (input: Input) => Either<Error, Output> | TaskEither<Error, Output>
-    ) {
-      const chainFn = fn({
-        ...context,
-        ...Object.fromEntries(dependencies),
-      });
-
-      return Object.assign(builder, { [name]: chainFn });
+      api[key] = pipedValue;
+      Object.assign(builder, { [key]: pipedValue });
+      return builder;
     },
   };
 
-  return builder as BuilderInstance<TState, TConfig, DependencyRecord, DependencyRecord>;
+  return builder as BuilderInstance<TState, TConfig, DependencyRecord, typeof api>;
 }
 
 export type { Either, TaskEither };
