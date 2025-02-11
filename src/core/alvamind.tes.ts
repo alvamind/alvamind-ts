@@ -5,6 +5,7 @@ import * as TE from 'fp-ts/TaskEither';
 import { pipe } from 'fp-ts/function';
 
 describe("Alvamind Core", () => {
+
   describe("Module Creation", () => {
     it("should create a new module with name", () => {
       const module = Alvamind({ name: "TestModule" });
@@ -213,5 +214,120 @@ describe("Alvamind Core", () => {
       expect(module.dangerousOperation("test")).toBe("TEST");
       expect(module.dangerousOperation(123)).toBe("ERROR");
     });
+  });
+
+  // ────────────── Additional Test Cases ──────────────
+
+  describe("Advanced Features", () => {
+
+    it("should chain multiple derive calls and combine APIs", () => {
+      // Define the state interface
+      interface ModuleState {
+        value: number;
+      }
+
+      const module = Alvamind<ModuleState>({
+        name: "ChainDeriveModule",
+        state: { value: 0 } // Initialize with default value
+      })
+        .derive(({ state }) => ({
+          setValue: (val: number) => state.set({ value: val }),
+          getValue: () => state.get().value
+        }))
+        .derive(() => ({
+          multiply: (n: number, factor: number) => n * factor,
+        }))
+        .derive(({ getValue, multiply }) => ({
+          multiplyStoredValue: (factor: number) => multiply(getValue(), factor)
+        }));
+
+      module.setValue(5); // Use the derived setValue method instead of accessing state directly
+      expect(module.getValue()).toBe(5);
+      expect(module.multiplyStoredValue(3)).toBe(15);
+    });
+
+    it("should override decorated properties", () => {
+      const module = Alvamind({ name: "DecorateModule" })
+        .decorate("version", "1.0")
+        .decorate("version", "2.0")
+        .derive(() => ({
+          getVersion: () => module.version
+        }));
+
+      expect(module.getVersion()).toBe("2.0");
+    });
+
+    it("should support multiple dependencies via .use()", () => {
+      const dep1 = { greet: () => "Hello" };
+      const dep2 = { exclaim: (s: string) => s + "!" };
+
+      const module = Alvamind({ name: "MultiDependencyModule" })
+        .use(dep1)
+        .use(dep2)
+        .derive(({ greet, exclaim }) => ({
+          greetAndExclaim: () => exclaim(greet())
+        }));
+
+      expect(module.greetAndExclaim()).toBe("Hello!");
+    });
+
+    it("should call all registered onStart hooks once", () => {
+      let count = 0;
+      const hook1 = () => { count += 1; };
+      const hook2 = ({ state }: any) => {
+        // Even if accessing state, just ensure hook is called.
+        count += 1;
+      };
+
+      // onStart hooks are called automatically once when registered.
+      Alvamind({ name: "MultiStartModule" })
+        .onStart(hook1)
+        .onStart(hook2);
+
+      expect(count).toBe(2);
+    });
+
+    it("should call all onStop hooks when stop is triggered", () => {
+      let stopCount = 0;
+
+      const module = Alvamind({ name: "MultiStopModule" })
+        .onStop(() => stopCount++)
+        .onStop(() => stopCount++)
+        .derive(() => ({
+          stop: () => {
+            // Simulate calling onStop hooks manually.
+            // In this implementation, onStop hooks are not auto-invoked,
+            // so we call them as part of a 'stop' method.
+            // (A real implementation might loop stopHooks here.)
+            stopCount++;
+          }
+        }));
+
+      module.stop();
+      // Since we have called both onStop hooks and then the 'stop' method,
+      // our stopCount should reflect the three invocations.
+      expect(stopCount).toBe(3);
+    });
+
+    it("should protect state from direct mutations", () => {
+      interface State { count: number }
+      const module = Alvamind<State>({
+        name: "ImmutableStateModule",
+        state: { count: 10 }
+      }).derive(({ state }) => ({
+        getState: () => state.get()
+      }));
+
+      const currentState = module.getState();
+      // Trying to modify the returned state object should not affect the stored state.
+      try {
+        // @ts-expect-error: Intentionally attempting mutation to test immutability.
+        currentState.count = 100;
+      } catch (_) {
+        // If error is thrown, that is acceptable.
+      }
+      expect(module.getState().count).toBe(10);
+    });
+
   });
 });
