@@ -1,0 +1,240 @@
+## 3.5. Integrating with Other Libraries
+
+Alvamind is designed to be framework-agnostic, focusing on your application's core logic.  This makes it easy to integrate with various libraries and tools, including HTTP servers, API frameworks, and ORMs.
+
+### 3.5.1. Using with HTTP Servers (Express, Fastify, etc.)
+
+Alvamind modules don't directly handle HTTP requests and responses.  Instead, you use them *within* your route handlers (controllers) of your chosen HTTP server.
+
+**Example (Express):**
+
+```typescript
+// user.logic.ts (Alvamind)
+import { Alvamind } from 'alvamind';
+
+export const userLogic = new Alvamind({ name: 'UserLogic' })
+.derive(()=>({
+  createUser: async (name: string, email: string) => {
+    // ... validation, database logic ...
+    return { id: '123', name, email };
+  },
+  getUser: async (id: string) => {
+    // ... database logic ...
+    return { id, name: 'Alice', email: 'alice@example.com' };
+  },
+}));
+
+// app.ts (Express)
+import express from 'express';
+import { userLogic } from './user.logic';
+
+const app = express();
+app.use(express.json());
+
+app.post('/users', async (req, res) => {
+  try {
+    const { name, email } = req.body;
+    const user = await userLogic.createUser(name, email); // Use Alvamind module
+    res.status(201).json(user);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.get('/users/:id', async (req, res) => {
+  const { id } = req.params;
+  const user = await userLogic.getUser(id); // Use Alvamind module
+  res.json(user);
+});
+
+app.listen(3000, () => {
+  console.log('Server listening on port 3000');
+});
+```
+
+**Example (Fastify):**
+
+```typescript
+// (Same user.logic.ts as above)
+
+// app.ts (Fastify)
+import Fastify from 'fastify';
+import { userLogic } from './user.logic';
+
+const fastify = Fastify({ logger: true });
+
+fastify.post('/users', async (request, reply) => {
+  try {
+    const { name, email } = request.body as {name: string, email: string};
+    const user = await userLogic.createUser(name, email);
+    reply.status(201).send(user);
+  } catch (error) {
+    reply.status(400).send({ error: error.message });
+  }
+});
+
+fastify.get('/users/:id', async (request, reply) => {
+  const { id } = request.params as {id: string};
+  const user = await userLogic.getUser(id);
+  reply.send(user);
+});
+
+fastify.listen({ port: 3000 }, (err) => {
+  if (err) {
+    fastify.log.error(err);
+    process.exit(1);
+  }
+  console.log('server is listening on 3000');
+});
+
+```
+
+In both examples, `userLogic` (the Alvamind module) handles the business logic (creating and retrieving users), while the HTTP server (Express or Fastify) handles routing, request parsing, and response formatting.
+
+### 3.5.2. Using with tRPC
+
+tRPC is a library for building end-to-end typesafe APIs.  Alvamind integrates seamlessly with tRPC.
+
+```typescript
+// user.logic.ts (Alvamind - same as before)
+
+// trpc.ts (tRPC setup)
+import * as trpc from '@trpc/server';
+
+export const t = trpc.initTRPC.create();
+
+// appRouter.ts (tRPC router)
+import { t } from './trpc';
+import { userLogic } from './user.logic';
+import { z } from 'zod';
+
+export const appRouter = t.router({
+  createUser: t.procedure
+    .input(z.object({ name: z.string(), email: z.string().email() })) // Define input schema
+    .mutation(async ({ input }) => {
+      const { name, email } = input;
+      return userLogic.createUser(name, email); // Use Alvamind module
+    }),
+  getUser: t.procedure
+    .input(z.string()) // Define input schema (user ID)
+    .query(async ({ input }) => {
+      return userLogic.getUser(input); // Use Alvamind module
+    }),
+});
+
+export type AppRouter = typeof appRouter;
+
+// server.ts (Example using Express and tRPC)
+import * as trpcExpress from '@trpc/server/adapters/express';
+import express from 'express';
+import { appRouter } from './appRouter';
+
+const app = express();
+
+app.use(
+  '/trpc',
+  trpcExpress.createExpressMiddleware({
+    router: appRouter,
+    createContext: () => null, // No context needed in this example
+  })
+);
+
+app.listen(3000, () => {
+  console.log('Server listening on port 3000');
+});
+```
+
+The key is that your tRPC procedures (queries and mutations) call the functions exposed by your Alvamind modules. This keeps your API layer thin and focused on request handling, while your Alvamind modules handle the actual application logic.
+
+### 3.5.3. Using with Prisma
+
+Prisma is a type-safe database client.  You can use Prisma within your Alvamind modules to interact with your database.
+
+```typescript
+// db.ts (Prisma setup)
+import { PrismaClient } from '@prisma/client';
+
+export const prisma = new PrismaClient();
+
+// user.logic.ts (Alvamind)
+import { Alvamind } from 'alvamind';
+import { prisma } from './db'; // Import the Prisma client
+
+export const userLogic = new Alvamind({ name: 'UserLogic' })
+.use({db: prisma}) //inject as object, not module.
+.derive(({ db }) => ({  // Access the Prisma client
+  createUser: async (name: string, email: string) => {
+    return db.user.create({ // Use Prisma client
+      data: {
+        name,
+        email,
+      },
+    });
+  },
+  getUser: async (id: string) => {
+    return db.user.findUnique({ // Use Prisma client
+      where: {
+        id,
+      },
+    });
+  },
+}));
+
+//You can also inject as parameters
+// user.logic.ts
+// export const userLogic = new Alvamind({name: 'UserLogic'})
+// .derive(()=>({
+//   createUser: async (db: PrismaClient, name: string, email: string) => {
+//     return db.user.create({ // Use Prisma client
+//       data: {
+//         name,
+//         email,
+//       },
+//     });
+//   },
+// }))
+```
+
+You can inject the `PrismaClient` instance using `.use({db: prisma})` or pass in parameter and access it within your `.derive()` functions. This keeps your database interactions encapsulated within your Alvamind modules.
+
+### 3.5.4.  Using with Elysia.js
+Alvamind and Elysia.js work very well.
+
+```typescript
+// user.logic.ts (Alvamind)
+import { Alvamind } from 'alvamind';
+
+export const userLogic = new Alvamind({ name: 'UserLogic' })
+.derive(({ db }) => ({ // Assume `db` is injected via .use() or direct parameter
+  createUser: async (data) => {
+    // ... validation, normalization, database interaction ...
+    return db.users.create(data);
+  },
+  getUser: async (id: string) => {
+    return db.users.findUnique({ where: { id } });
+  },
+}));
+
+// app.ts (Elysia.js)
+import { Elysia } from 'elysia';
+import { userLogic } from './user.logic';
+import { db } from './db'; // Your database connection
+
+const app = new Elysia()
+  .decorate('userLogic', userLogic.use({db})) // Inject db into Alvamind module.
+  .post('/users', async ({ body, userLogic }) => { // Access the Alvamind module
+    const result = await userLogic.createUser(body);
+    return result;
+  })
+  .get('/users/:id', async ({ params, userLogic }) => {
+    const user = await userLogic.getUser(params.id);
+    return user;
+  })
+  .listen(3000);
+
+console.log(`Elysia server running at ${app.server?.hostname}:${app.server?.port}`);
+```
+
+Alvamind handles the *business logic*; Elysia.js handles the *HTTP layer*. This leverages the strengths of both. Alvamind's type safety extends seamlessly into the Elysia.js handlers.
+
+This section clearly demonstrates how to integrate Alvamind with popular libraries like Express, Fastify, tRPC, Prisma, and Elysia.js. It uses practical examples and shows how Alvamind fits into the larger ecosystem, focusing on its role in managing application logic while leaving other concerns to specialized tools. This highlights Alvamind's flexibility and framework-agnostic nature.
