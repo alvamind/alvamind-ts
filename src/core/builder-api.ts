@@ -1,0 +1,72 @@
+// src/core/builder-api.ts
+import { createDerive } from "../utils/functional/derive";
+import { createPipe } from "../utils/functional/pipe";
+import { AlvamindContext, BuilderInstance, DependencyRecord, StateManager, HookManager } from "./types";
+
+type BuilderAPIProps<TState extends Record<string, any>, TConfig> = {
+  context: AlvamindContext<TState, TConfig>;
+  dependencies: Map<string, unknown>;
+  api: Record<string, unknown>;
+  hookManager: HookManager<TState, TConfig>;
+  stateManager: StateManager<TState>;
+};
+
+export function createBuilderAPI<
+  TState extends Record<string, any>,
+  TConfig,
+  TApi extends Record<string, unknown> = Record<string, unknown>
+>({
+  context,
+  dependencies,
+  api,
+  hookManager,
+  stateManager,
+}: BuilderAPIProps<TState, TConfig>) {
+  const builder = {
+    use: <T extends DependencyRecord>(dep: T) => {
+      Object.entries(dep).forEach(([key, value]) => dependencies.set(key, value));
+      return builder as BuilderInstance<TState, TConfig, DependencyRecord & T, TApi>;
+    },
+
+    derive: <T extends DependencyRecord>(
+      fn: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) => T
+    ) => createDerive(context, dependencies, api)(builder, fn),
+
+    decorate: <K extends string, V>(key: K, value: V) => {
+      api[key] = value;
+      Object.assign(builder, { [key]: value });
+      return builder as BuilderInstance<TState, TConfig, DependencyRecord, TApi & Record<K, V>>;
+    },
+
+    watch: <K extends keyof TState>(
+      key: K,
+      handler: (newVal: TState[K], oldVal: TState[K]) => void
+    ) => {
+      stateManager.addWatcher(key, handler);
+      return builder;
+    },
+
+    onStart: (
+      hook: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) => void
+    ) => {
+      hookManager.addStartHook(hook, { ...context, ...Object.fromEntries(dependencies), ...api });
+      return builder;
+    },
+
+    onStop: (
+      hook: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) => void
+    ) => {
+      hookManager.addStopHook(hook);
+      return builder;
+    },
+
+    stop: () => hookManager.stop({ ...context, ...Object.fromEntries(dependencies), ...api }),
+
+    pipe: <K extends string, V>(
+      key: K,
+      fn: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) => V
+    ) => createPipe(context, dependencies, api)(builder, key, fn)
+  };
+
+  return builder as BuilderInstance<TState, TConfig, DependencyRecord, TApi>;
+}

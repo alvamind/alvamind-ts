@@ -32,6 +32,26 @@ export interface AlvamindContext<TState = void, TConfig = void, TDeps = unknown>
   readonly pipe: typeof pipe;
 }
 
+export interface StateManager<TState extends Record<string, any>> {
+  get: () => Readonly<TState>;
+  set: (newState: TState) => void;
+  addWatcher: <K extends keyof TState>(
+    key: K,
+    handler: (newVal: TState[K], oldVal: TState[K]) => void
+  ) => void;
+}
+
+export interface HookManager<TState, TConfig> {
+  addStartHook: (
+    hook: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) => void,
+    context: AlvamindContext<TState, TConfig> & Record<string, unknown>
+  ) => void;
+  addStopHook: (
+    hook: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) => void
+  ) => void;
+  stop: (context: AlvamindContext<TState, TConfig> & Record<string, unknown>) => void;
+}
+
 /**
  * A record type used for dependency injection.
  */

@@ -294,18 +294,16 @@ describe("Alvamind Core", () => {
         .onStop(() => stopCount++)
         .derive(() => ({
           stop: () => {
-            // Simulate calling onStop hooks manually.
-            // In this implementation, onStop hooks are not auto-invoked,
-            // so we call them as part of a 'stop' method.
-            // (A real implementation might loop stopHooks here.)
-            stopCount++;
+            // Just trigger the module's stop method
+            module.stop();
           }
         }));
 
       module.stop();
-      // Since we have called both onStop hooks and then the 'stop' method,
-      // our stopCount should reflect the three invocations.
-      expect(stopCount).toBe(3);
+      // We expect stopCount to be 2 because:
+      // - Two onStop hooks were registered
+      // - When stop() is called, both hooks are executed once
+      expect(stopCount).toBe(2);
     });
 
     it("should protect state from direct mutations", () => {
