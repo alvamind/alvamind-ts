@@ -1,7 +1,33 @@
 {
-  "name": "alvamind-ts",
-  "module": "index.ts",
+  "name": "alvamind",
+  "version": "1.0.1",
+  "description": "automatically create TypeScript interfaces and types that mirror your Prisma schema models and enums",
+  "keywords": [
+    "state-management",
+    "dependency-injection",
+    "typescript",
+    "fp-ts"
+  ],
   "type": "module",
+  "author": "Alvamind",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alvamind/alvamind.git"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "devDependencies": {
     "@types/bun": "latest"
   },
@@ -13,10 +39,14 @@
     "fp-ts": "2.16.9"
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "source": "generate-source output=documentation.md exclude=dist/,node_modules/,.git/",
     "commit": "commit",
     "clean": "clean",
     "split-code": "split-code source=combined.ts markers=src/,lib/ outputDir=./output",
-    "publish-npm": "publish-npm patch"
+    "publish-npm": "publish-npm patch",
+    "patch:apply": "patch -p2 -F3 -b < patch.diff",
+    "patch:del-ori": "find . -type f -name \"*.ts.orig\" -delete",
+    "patch:undo": "find . -type f -name \"*.ts\" -delete && find . -type f -name \"*.ts.orig\" -exec sh -c 'mv \"$0\" \"$(dirname \"$0\")/$(basename \"$0\" .orig)\"' \\;"
   }
 }

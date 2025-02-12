@@ -110,13 +110,13 @@ describe("Alvamind Core", () => {
           }));
 
         const moduleB = Alvamind({ name: "ModuleB" })
-          .use(moduleC) // Remove lazy here since C is already defined
+          .use(moduleC)
           .derive(({ valueC }) => ({
             valueB: () => `B -> ${valueC()}`
           }));
 
         const moduleA = Alvamind({ name: "ModuleA" })
-          .use(lazy(moduleB))
+          .use(moduleB)
           .derive(({ valueB }) => ({
             valueA: () => `A -> ${valueB()}`
           }));

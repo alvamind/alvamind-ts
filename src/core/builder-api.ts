@@ -100,7 +100,6 @@ export function createBuilderAPI<
       return createPipe(context, dependencies, api)(builder, key, fn);
     },
 
-    build: () => builder
   };
 
   return builder as BuilderInstance<TState, TConfig, DependencyRecord, TApi>;

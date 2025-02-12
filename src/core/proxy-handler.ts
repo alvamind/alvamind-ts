@@ -1,5 +1,4 @@
 // src/core/proxy-handler.ts
-
 import { LazyModule } from "./types";
 
 export function createCircularProxy<T extends object>(module: T): T {
