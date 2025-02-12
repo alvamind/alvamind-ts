@@ -235,7 +235,7 @@ const saveUser = async (user) => {
 };
 
 // Controlled Side Effect (GOOD) - using Alvamind's context for fp-ts
-const userModule = new Alvamind({ name: 'UserModule' })
+const userModule = Alvamind({ name: 'UserModule' })
 .derive(({ db, emailService, TE }) => ({ // Inject and access TE (TaskEither)
   saveUser: (user) =>
     pipe(
@@ -258,7 +258,7 @@ Alvamind leverages TypeScript's inference to automatically determine types. This
 
 ```typescript
 // Alvamind infers types automatically
-const userModule = new Alvamind({ name: 'UserModule' })
+const userModule = Alvamind({ name: 'UserModule' })
   .derive(() => ({
     // TypeScript knows `createUser` takes a string and returns a Promise<string>
     createUser: (name: string) => Promise.resolve(`User ${name} created`)
@@ -278,7 +278,7 @@ interface User {
   name: string;
 }
 
-const userModule = new Alvamind<User>({ name: 'UserModule' }); // Enforce User type
+const userModule = Alvamind<User>({ name: 'UserModule' }); // Enforce User type
 ```
 
 ### Railway-Oriented Programming: Elegant Error Handling 🛤️
@@ -303,7 +303,7 @@ const processOrder = (order) => {
   };
 
 // Railway-Oriented Programming (Clean) - using Alvamind's context for fp-ts
-const orderModule = new Alvamind({ name: 'OrderModule' })
+const orderModule = Alvamind({ name: 'OrderModule' })
 .derive(({E})=>({
     processOrder: (order) =>
     pipe(
@@ -348,7 +348,7 @@ Let's create a simple "Greeter" module:
 // src/greeter.module.ts
 import { Alvamind } from 'alvamind';
 
-// Create a new Alvamind module
+// Create a Alvamind module
 export const greeterModule = Alvamind({
   name: 'GreeterModule',
 })
