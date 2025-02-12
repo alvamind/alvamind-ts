@@ -1,6 +1,6 @@
 {
   "name": "alvamind",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "automatically create TypeScript interfaces and types that mirror your Prisma schema models and enums",
   "keywords": [
     "state-management",

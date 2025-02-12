@@ -92,7 +92,7 @@ describe("Alvamind Core", () => {
 
         const mainModule = Alvamind({ name: "MainModule" })
           .use(moduleA)
-          .use(lazy(moduleB))
+          .use(lazy(() => moduleB))
           .derive(({ doA }) => ({
             start: (input: string) => doA(input)
           }));

@@ -107,7 +107,7 @@ export type BuilderInstance<
 
 export interface LazyModule<T> {
   __lazyModule: true;
-  implementation: T & Record<string, unknown>;
+  readonly implementation: T;
 }
 
 // Also re-export some fp-ts types for convenience.
