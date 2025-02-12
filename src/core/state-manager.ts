@@ -1,4 +1,4 @@
-// src/core/state-manager.ts
+/* src/core/state-manager.ts */
 export function createStateManager<TState extends Record<string, unknown>>(initialState: TState) {
   let currentState = initialState;
   const watchers = new Map<keyof TState, Array<(newVal: unknown, oldVal: unknown) => void>>();

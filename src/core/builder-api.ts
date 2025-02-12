@@ -1,7 +1,15 @@
-// src/core/builder-api.ts
+/* src/core/builder-api.ts */
 import { createDerive } from "../utils/functional/derive";
 import { createPipe } from "../utils/functional/pipe";
-import { AlvamindContext, BuilderInstance, DependencyRecord, StateManager, HookManager } from "./types";
+import {
+  AlvamindContext,
+  BuilderInstance,
+  DependencyRecord,
+  StateManager,
+  HookManager,
+  LazyModule
+} from "./types";
+import { isLazyModule } from "./proxy-handler";
 
 type BuilderAPIProps<TState extends Record<string, any>, TConfig> = {
   context: AlvamindContext<TState, TConfig>;
@@ -14,7 +22,7 @@ type BuilderAPIProps<TState extends Record<string, any>, TConfig> = {
 export function createBuilderAPI<
   TState extends Record<string, any>,
   TConfig,
-  TApi extends Record<string, unknown> = Record<string, unknown>
+  TApi extends Record<string, unknown> = {}
 >({
   context,
   dependencies,
@@ -23,14 +31,32 @@ export function createBuilderAPI<
   stateManager,
 }: BuilderAPIProps<TState, TConfig>) {
   const builder = {
-    use: <T extends DependencyRecord>(dep: T) => {
-      Object.entries(dep).forEach(([key, value]) => dependencies.set(key, value));
+
+    use: <T extends DependencyRecord | LazyModule<any>>(dep: T) => {
+      if (isLazyModule(dep)) {
+        Object.entries(dep.implementation).forEach(([key, value]) => {
+          dependencies.set(key, value);
+        });
+      } else {
+        Object.entries(dep as Record<string, unknown>).forEach(([key, value]) => {
+          dependencies.set(key, value);
+        });
+      }
       return builder as BuilderInstance<TState, TConfig, DependencyRecord & T, TApi>;
     },
 
     derive: <T extends DependencyRecord>(
       fn: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) => T
-    ) => createDerive(context, dependencies, api)(builder, fn),
+    ) => {
+      // Use a cast to help TypeScript accumulate derived properties.
+      return (createDerive(context, dependencies, api)(builder, fn) as unknown) as BuilderInstance<
+        TState,
+        TConfig,
+        DependencyRecord,
+        TApi & T
+      > &
+        T;
+    },
 
     decorate: <K extends string, V>(key: K, value: V) => {
       api[key] = value;
@@ -49,7 +75,10 @@ export function createBuilderAPI<
     onStart: (
       hook: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) => void
     ) => {
-      hookManager.addStartHook(hook, { ...context, ...Object.fromEntries(dependencies), ...api });
+      hookManager.addStartHook(
+        hook,
+        { ...context, ...Object.fromEntries(dependencies), ...api }
+      );
       return builder;
     },
 
@@ -60,12 +89,17 @@ export function createBuilderAPI<
       return builder;
     },
 
-    stop: () => hookManager.stop({ ...context, ...Object.fromEntries(dependencies), ...api }),
+    stop: () =>
+      hookManager.stop({ ...context, ...Object.fromEntries(dependencies), ...api }),
 
     pipe: <K extends string, V>(
       key: K,
       fn: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) => V
-    ) => createPipe(context, dependencies, api)(builder, key, fn)
+    ) => {
+      return createPipe(context, dependencies, api)(builder, key, fn);
+    },
+
+    build: () => builder
   };
 
   return builder as BuilderInstance<TState, TConfig, DependencyRecord, TApi>;

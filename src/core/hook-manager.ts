@@ -1,4 +1,4 @@
-// src/core/hook-manager.ts
+/* src/core/hook-manager.ts */
 import { AlvamindContext } from "./types";
 
 export function createHookManager<TState, TConfig>() {

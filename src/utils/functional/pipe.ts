@@ -1,6 +1,5 @@
-// src/utils/functional/pipe.ts
+/* src/utils/functional/pipe.ts */
 import { AlvamindContext, DependencyRecord } from "../../core/types";
-import { pipe } from "fp-ts/function";
 
 export const createPipe = <TState, TConfig>(
   context: AlvamindContext<TState, TConfig>,
@@ -10,11 +9,12 @@ export const createPipe = <TState, TConfig>(
   builder: object,
   key: K,
   fn: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) => V
-) =>
-    Object.assign(builder, {
-      [key]: api[key] = fn({
-        ...context,
-        ...Object.fromEntries(dependencies),
-        ...api
-      })
+) => {
+    const result = fn({
+      ...context,
+      ...Object.fromEntries(dependencies),
+      ...api
     });
+    api[key] = result;
+    return Object.assign(builder, { [key]: result }) as any;
+  };

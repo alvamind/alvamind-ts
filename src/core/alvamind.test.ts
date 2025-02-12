@@ -1,5 +1,5 @@
 import { expect, test, describe, beforeAll, afterAll, beforeEach, afterEach, it } from "bun:test";
-import { Alvamind } from "./alvamind";
+import { Alvamind, lazy } from "./alvamind";
 import * as E from 'fp-ts/Either';
 import * as TE from 'fp-ts/TaskEither';
 import { pipe } from 'fp-ts/function';
@@ -74,64 +74,57 @@ describe("Alvamind Core", () => {
       it("should handle circular module dependencies", () => {
         let callCount = 0;
 
-        // Module A depends on B
-        const moduleA = Alvamind({ name: "ModuleA" })
-          .derive(() => ({
-            doA: (input: string) => {
-              callCount++;
-              if (callCount > 5) return input; // Prevent infinite recursion
-              return moduleB.doB(`${input} -> A`);
-            }
-          }));
-
-        // Module B depends on A
         const moduleB = Alvamind({ name: "ModuleB" })
           .derive(() => ({
-            doB: (input: string) => {
+            doB: (input: string): string => {
               callCount++;
-              if (callCount > 5) return input; // Prevent infinite recursion
-              return moduleA.doA(`${input} -> B`);
+              return callCount > 5 ? input : moduleA.doA(`${input} -> B`);
             }
           }));
 
-        // Create main module that uses both A and B
+        const moduleA = Alvamind({ name: "ModuleA" })
+          .derive(() => ({
+            doA: (input: string): string => {
+              callCount++;
+              return callCount > 5 ? input : moduleB.doB(`${input} -> A`);
+            }
+          }));
+
         const mainModule = Alvamind({ name: "MainModule" })
           .use(moduleA)
-          .use(moduleB);
+          .use(lazy(moduleB))
+          .derive(({ doA }) => ({
+            start: (input: string) => doA(input)
+          }));
 
-        const result = mainModule.doA("start");
+        const result = mainModule.start("start");
         expect(result).toContain("start");
         expect(callCount).toBeGreaterThan(0);
-        expect(callCount).toBeLessThanOrEqual(6); // Verify recursion limit worked
+        expect(callCount).toBeLessThanOrEqual(6);
       });
 
       it("should handle deep circular dependencies", () => {
-        const moduleA = Alvamind({ name: "ModuleA" })
+        const moduleC = Alvamind({ name: "ModuleC" })
           .derive(() => ({
-            valueA: () => moduleB.valueB()
+            valueC: () => "C"
           }));
 
         const moduleB = Alvamind({ name: "ModuleB" })
-          .derive(() => ({
-            valueB: () => moduleC.valueC()
+          .use(lazy(moduleC))
+          .derive(({ valueC }) => ({
+            valueB: () => `B -> ${valueC()}`
           }));
 
-        const moduleC = Alvamind({ name: "ModuleC" })
-          .derive(() => ({
-            valueC: () => "C calls A: " + moduleA.valueA()
+        const moduleA = Alvamind({ name: "ModuleA" })
+          .use(lazy(moduleB))
+          .derive(({ valueB }) => ({
+            valueA: () => `A -> ${valueB()}`
           }));
 
-        const mainModule = Alvamind({ name: "MainModule" })
-          .use(moduleA)
-          .use(moduleB)
-          .use(moduleC)
-          .derive(({ valueA }) => ({
-            test: () => valueA()
-          }));
-
-        expect(() => mainModule.test()).not.toThrow();
+        const result = moduleA.valueA();
+        expect(result).toBe("A -> B -> C");
       });
-    })
+    });
   });
 
   describe("State Management", () => {

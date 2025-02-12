@@ -1,3 +1,4 @@
+/* src/core/constants.ts */
 /**
  * The error message to be used when a module name is not provided.
  */

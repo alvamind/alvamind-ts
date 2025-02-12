@@ -1,4 +1,4 @@
-// src/core/alvamind.ts
+/* src/core/alvamind.ts */
 import { pipe as fpPipe } from "fp-ts/function";
 import * as E from "fp-ts/Either";
 import * as TE from "fp-ts/TaskEither";
@@ -8,6 +8,7 @@ import { MODULE_NAME_REQUIRED, DEFAULT_CONFIG } from "./constants";
 import { createStateManager } from "./state-manager";
 import { createHookManager } from "./hook-manager";
 import { createBuilderAPI } from "./builder-api";
+import { lazy as lazyImpl } from "../utils/functional/lazy";
 
 export function Alvamind<
   TState extends Record<string, any>,
@@ -19,7 +20,7 @@ export function Alvamind<
     throw new Error(MODULE_NAME_REQUIRED);
   }
 
-  const stateManager = createStateManager<TState>(options.state || {} as TState);
+  const stateManager = createStateManager<TState>(options.state || ({} as TState));
   const hookManager = createHookManager<TState, TConfig>();
   const dependencies = new Map<string, unknown>();
   const api: Record<string, unknown> = {};
@@ -42,5 +43,6 @@ export function Alvamind<
   });
 }
 
+export const lazy = lazyImpl;
 export type { Either, TaskEither } from "./types";
 export default Alvamind;
