@@ -4,11 +4,6 @@ import * as E from "fp-ts/Either";
 import * as TE from "fp-ts/TaskEither";
 import * as O from "fp-ts/Option";
 
-export type DeferredType<T> = {
-  [K in keyof T]: T[K] extends (...args: infer Args) => infer R
-  ? (...args: Args) => R
-  : T[K];
-};
 
 /**
  * Options for configuring an Alvamind instance.
@@ -77,10 +72,17 @@ export type BuilderInstance<
 > = {
   use<T extends DependencyRecord | LazyModule<any>>(
     dep: T
-  ): BuilderInstance<TState, TConfig, TDeps & T, TApi>;
+  ): BuilderInstance<
+    TState,
+    TConfig,
+    TDeps & (T extends LazyModule<infer U> ? U : T),
+    TApi
+  >;
+
   derive<T extends DependencyRecord>(
     fn: (ctx: AlvamindContext<TState, TConfig> & TDeps & TApi) => T
   ): BuilderInstance<TState, TConfig, TDeps, TApi & T> & T;
+
   decorate<K extends string, V>(
     key: K,
     value: V
@@ -103,9 +105,9 @@ export type BuilderInstance<
   build(): BuilderInstance<TState, TConfig, TDeps, TApi> & TApi;
 } & TApi;
 
-export interface LazyModule<T> extends Record<string, unknown> {
+export interface LazyModule<T> {
   __lazyModule: true;
-  implementation: T;
+  implementation: T & Record<string, unknown>;
 }
 
 // Also re-export some fp-ts types for convenience.

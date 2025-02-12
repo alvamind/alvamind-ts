@@ -110,7 +110,7 @@ describe("Alvamind Core", () => {
           }));
 
         const moduleB = Alvamind({ name: "ModuleB" })
-          .use(lazy(moduleC))
+          .use(moduleC) // Remove lazy here since C is already defined
           .derive(({ valueC }) => ({
             valueB: () => `B -> ${valueC()}`
           }));
@@ -121,8 +121,7 @@ describe("Alvamind Core", () => {
             valueA: () => `A -> ${valueB()}`
           }));
 
-        const result = moduleA.valueA();
-        expect(result).toBe("A -> B -> C");
+        expect(moduleA.valueA()).toBe("A -> B -> C");
       });
     });
   });

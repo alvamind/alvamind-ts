@@ -34,7 +34,8 @@ export function createBuilderAPI<
 
     use: <T extends DependencyRecord | LazyModule<any>>(dep: T) => {
       if (isLazyModule(dep)) {
-        Object.entries(dep.implementation).forEach(([key, value]) => {
+        const implementation = dep.implementation as Record<string, unknown>;
+        Object.entries(implementation).forEach(([key, value]) => {
           dependencies.set(key, value);
         });
       } else {

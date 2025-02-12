@@ -2,13 +2,9 @@
 import { LazyModule } from "../../core/types";
 import { createCircularProxy } from "../../core/proxy-handler";
 
-export function lazy<T extends object>(module: T): LazyModule<T> {
+export function lazy<T extends Record<string, unknown>>(module: T): LazyModule<T> {
   return {
     __lazyModule: true,
-    implementation: createCircularProxy(module)
+    implementation: createCircularProxy(module) as T & Record<string, unknown>
   };
-}
-
-export function isLazyModule<T>(module: any): module is LazyModule<T> {
-  return module && module.__lazyModule === true;
 }
