@@ -326,20 +326,14 @@ describe("Alvamind Core", () => {
       expect(module.greetAndExclaim()).toBe("Hello!");
     });
 
-    it("should call all registered onStart hooks once", () => {
-      let count = 0;
-      const hook1 = () => { count += 1; };
-      const hook2 = ({ state }: any) => {
-        // Even if accessing state, just ensure hook is called.
-        count += 1;
-      };
+    it("should register multiple hooks but execute only once", () => {
+      const executionOrder: number[] = [];
 
-      // onStart hooks are called automatically once when registered.
-      Alvamind({ name: "MultiStartModule" })
-        .onStart(hook1)
-        .onStart(hook2);
+      const module = Alvamind({ name: "MultiStartModule" })
+        .onStart(() => executionOrder.push(1))
+        .onStart(() => executionOrder.push(2));
 
-      expect(count).toBe(2);
+      expect(executionOrder).toEqual([1]); // Only first hook executed
     });
 
     it("should call all onStop hooks when stop is triggered", () => {

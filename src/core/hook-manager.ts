@@ -16,14 +16,18 @@ export function createHookManager<TState, TConfig>() {
       if (!isStarted) {
         isStarted = true;
         startHooks.forEach(h => h(context));
-      } else {
-        hook(context);
       }
     },
     addStopHook: (
       hook: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) => void
     ) => {
       stopHooks.push(hook);
+    },
+    start: (context: AlvamindContext<TState, TConfig> & Record<string, unknown>) => {
+      if (!isStarted) {
+        isStarted = true;
+        startHooks.forEach(hook => hook(context));
+      }
     },
     stop: (context: AlvamindContext<TState, TConfig> & Record<string, unknown>) => {
       if (!isStopped) {

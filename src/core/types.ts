@@ -51,6 +51,7 @@ export interface HookManager<TState, TConfig> {
   addStopHook: (
     hook: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) => void
   ) => void;
+  start: (context: AlvamindContext<TState, TConfig> & Record<string, unknown>) => void;
   stop: (context: AlvamindContext<TState, TConfig> & Record<string, unknown>) => void;
 }
 
@@ -97,6 +98,7 @@ export type BuilderInstance<
   onStop(
     hook: (ctx: AlvamindContext<TState, TConfig> & TDeps & TApi) => void
   ): BuilderInstance<TState, TConfig, TDeps, TApi>;
+  start(): void;
   stop(): void;
   pipe<K extends string, V>(
     key: K,

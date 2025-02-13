@@ -90,8 +90,9 @@ export function createBuilderAPI<
       return builder;
     },
 
-    stop: () =>
-      hookManager.stop({ ...context, ...Object.fromEntries(dependencies), ...api }),
+    start: () => hookManager.start({ ...context, ...Object.fromEntries(dependencies), ...api }),
+
+    stop: () => hookManager.stop({ ...context, ...Object.fromEntries(dependencies), ...api }),
 
     pipe: <K extends string, V>(
       key: K,
