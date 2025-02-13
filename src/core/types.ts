@@ -1,30 +1,21 @@
 /* src/core/types.ts */
+
 import { pipe } from "fp-ts/function";
 import * as E from "fp-ts/Either";
 import * as TE from "fp-ts/TaskEither";
 import * as O from "fp-ts/Option";
 
-
-/**
- * Options for configuring an Alvamind instance.
- */
 export interface AlvamindOptions<TState = void, TConfig = void> {
   readonly name: string;
   readonly state?: TState;
   readonly config?: TConfig;
 }
 
-/**
- * A simple state accessor interface.
- */
 export interface StateAccessor<TState> {
   get: () => Readonly<TState>;
   set: (newState: TState) => void;
 }
 
-/**
- * The execution context passed to lifecycle hooks, derivations, and pipes.
- */
 export interface AlvamindContext<TState = void, TConfig = void, TDeps = unknown> {
   readonly state: StateAccessor<TState>;
   readonly config: Readonly<TConfig>;
@@ -41,6 +32,11 @@ export interface StateManager<TState extends Record<string, any>> {
     key: K,
     handler: (newVal: TState[K], oldVal: TState[K]) => void
   ) => void;
+  getWatcherCount?: (key: keyof TState) => number;  // Optional
+  clearWatchers?: () => void;                     // Optional
+  hasChanged?: () => boolean;                      // Optional
+  getModifiedKeys?: (previousState?: TState) => Array<keyof TState>; // Optional
+  _unsafeSet?: (mutator: (draft: TState) => void) => void;            // Optional
 }
 
 export interface HookManager<TState, TConfig> {
@@ -53,18 +49,12 @@ export interface HookManager<TState, TConfig> {
   ) => void;
   start: (context: AlvamindContext<TState, TConfig> & Record<string, unknown>) => void;
   stop: (context: AlvamindContext<TState, TConfig> & Record<string, unknown>) => void;
+  clear?: () => void;                              // Optional
+  getHookCount?: () => { start: number, stop: number };   // Optional
 }
 
-/**
- * A record type used for dependency injection.
- */
 export type DependencyRecord = Record<string, unknown>;
 
-/**
- * BuilderInstance is a fluent API that lets users attach dependencies,
- * derive additional values from the context, decorate the instance with new properties,
- * and register lifecycle hooks.
- */
 export type BuilderInstance<
   TState,
   TConfig,
@@ -112,6 +102,31 @@ export interface LazyModule<T> {
   readonly implementation: T;
 }
 
-// Also re-export some fp-ts types for convenience.
+export interface PerformanceMetrics {
+  instanceCount: number;
+  methodSharedCount: number;
+  stateUpdateCount: number;
+  derivationCacheHits?: number;
+  pipeCacheHits?: number;
+}
+
+export interface AlvamindPerformance {
+  reset(): void;
+  getMetrics(): PerformanceMetrics | null;
+  setDevelopmentMode(enabled: boolean): void;
+}
+
+export interface GlobalThis {
+  window?: {
+    addEventListener: (event: string, handler: () => void) => void;
+  };
+}
+
+declare global {
+  const globalThis: GlobalThis;
+}
+
+// Also re-export some fp-ts types
 export type { Either } from "fp-ts/Either";
 export type { TaskEither } from "fp-ts/TaskEither";
+export type { Option } from "fp-ts/Option";

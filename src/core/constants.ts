@@ -1,10 +1,11 @@
 /* src/core/constants.ts */
-/**
- * The error message to be used when a module name is not provided.
- */
-export const MODULE_NAME_REQUIRED = "Alvamind module must have a name";
 
-/**
- * Default configuration object in case none is supplied.
- */
+export const MODULE_NAME_REQUIRED = "Alvamind module must have a name";
 export const DEFAULT_CONFIG = {};
+
+export const PERFORMANCE_CONFIG = {
+  ENABLE_CACHING: true,
+  ENABLE_METHOD_SHARING: true,
+  ENABLE_METRICS: process.env.NODE_ENV !== 'production',
+  MAX_CACHE_SIZE: 1000,
+};

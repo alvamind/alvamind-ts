@@ -1,15 +1,75 @@
 /* src/core/builder-api.ts */
-import { createDerive } from "../utils/functional/derive";
-import { createPipe } from "../utils/functional/pipe";
+
+import { pipe } from "fp-ts/function";
 import {
   AlvamindContext,
   BuilderInstance,
   DependencyRecord,
   StateManager,
   HookManager,
-  LazyModule
+  LazyModule,
 } from "./types";
 import { isLazyModule } from "./proxy-handler";
+
+// Shared pool to share function references between modules
+const sharedMethodPool = new WeakMap<Function, Function>();
+
+// WeakMap to cache created context objects; we use a simple object as key here.
+let contextCache = new WeakMap<object, object>();
+
+// Define a type for cached context that extends the base AlvamindContext with extra properties.
+type CachedContext<TState, TConfig> = AlvamindContext<TState, TConfig> & Record<string, unknown>;
+
+/**
+ * Returns a shared version of a function.
+ */
+function getSharedMethod(fn: Function): Function {
+  let shared = sharedMethodPool.get(fn);
+  if (!shared) {
+    shared = fn;
+    sharedMethodPool.set(fn, shared);
+  }
+  return shared;
+}
+
+/**
+ * Creates (or retrieves from cache) a context that merges the base context
+ * with dependency and API values.
+ */
+function createCachedContext<TState, TConfig>(
+  baseContext: AlvamindContext<TState, TConfig>,
+  dependencies: Map<string, unknown>,
+  api: Record<string, unknown>
+): CachedContext<TState, TConfig> {
+  const cacheKey = { baseContext, dependencies, api };
+  let cached = contextCache.get(cacheKey) as CachedContext<TState, TConfig>;
+  if (!cached) {
+    const descriptors: PropertyDescriptorMap = {};
+
+    // Convert each dependency to a property descriptor
+    dependencies.forEach((value, key) => {
+      descriptors[key] = {
+        value,
+        enumerable: true,
+        configurable: true,
+        writable: false,
+      };
+    });
+
+    // Also add all descriptors from the API object
+    Object.assign(descriptors, Object.getOwnPropertyDescriptors(api));
+
+    // Create a new context object that prototypically inherits from baseContext.
+    cached = Object.create(baseContext, descriptors) as CachedContext<TState, TConfig>;
+    contextCache.set(cacheKey, cached);
+  }
+  return cached;
+}
+
+// Helper type for lifecycle hooks
+type TypedHook<TState, TConfig> = (
+  ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>
+) => void;
 
 type BuilderAPIProps<TState extends Record<string, any>, TConfig> = {
   context: AlvamindContext<TState, TConfig>;
@@ -19,6 +79,10 @@ type BuilderAPIProps<TState extends Record<string, any>, TConfig> = {
   stateManager: StateManager<TState>;
 };
 
+/**
+ * Creates a builder API instance which supports dependency injection,
+ * method derivation, decorating, state watching, and lifecycle hooks.
+ */
 export function createBuilderAPI<
   TState extends Record<string, any>,
   TConfig,
@@ -30,78 +94,94 @@ export function createBuilderAPI<
   hookManager,
   stateManager,
 }: BuilderAPIProps<TState, TConfig>) {
-  const builder = {
 
-    use: <T extends DependencyRecord | LazyModule<any>>(dep: T) => {
+  // Define the prototype containing all shared methods.
+  const builderPrototype = {
+    pipe,
+
+    use: function <T extends DependencyRecord | LazyModule<any>>(dep: T) {
       if (isLazyModule(dep)) {
         const implementation = dep.implementation as Record<string, unknown>;
-        Object.entries(implementation).forEach(([key, value]) => {
-          dependencies.set(key, value);
-        });
+        for (const [key, value] of Object.entries(implementation)) {
+          dependencies.set(key, typeof value === "function" ? getSharedMethod(value) : value);
+        }
       } else {
-        Object.entries(dep as Record<string, unknown>).forEach(([key, value]) => {
-          dependencies.set(key, value);
-        });
+        for (const [key, value] of Object.entries(dep as Record<string, unknown>)) {
+          dependencies.set(key, typeof value === "function" ? getSharedMethod(value) : value);
+        }
       }
-      return builder as BuilderInstance<TState, TConfig, DependencyRecord & T, TApi>;
+      return this;
     },
 
-    derive: <T extends DependencyRecord>(
+    derive: function <T extends DependencyRecord>(
       fn: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) => T
-    ) => {
-      // Use a cast to help TypeScript accumulate derived properties.
-      return (createDerive(context, dependencies, api)(builder, fn) as unknown) as BuilderInstance<
-        TState,
-        TConfig,
-        DependencyRecord,
-        TApi & T
-      > &
-        T;
+    ) {
+      const ctx = createCachedContext(context, dependencies, api);
+      const derivedValue = fn(ctx as any); // (cast to any)
+
+      // Ensure that derived functions are shared across instances.
+      for (const [key, value] of Object.entries(derivedValue)) {
+        if (typeof value === "function") {
+          const sharedMethod = getSharedMethod(value);
+          (api as any)[key] = sharedMethod;
+          (derivedValue as any)[key] = sharedMethod;
+        } else {
+          (api as any)[key] = value;
+        }
+      }
+
+      Object.assign(this, derivedValue);
+      return this;
     },
 
-    decorate: <K extends string, V>(key: K, value: V) => {
-      api[key] = value;
-      Object.assign(builder, { [key]: value });
-      return builder as BuilderInstance<TState, TConfig, DependencyRecord, TApi & Record<K, V>>;
+    decorate: function <K extends string, V>(key: K, value: V) {
+      const finalValue = typeof value === "function" ? getSharedMethod(value) : value;
+      (api as any)[key] = finalValue;
+      (this as any)[key] = finalValue;
+      return this;
     },
 
-    watch: <K extends keyof TState>(
+    watch: function <K extends keyof TState>(
       key: K,
       handler: (newVal: TState[K], oldVal: TState[K]) => void
-    ) => {
+    ) {
       stateManager.addWatcher(key, handler);
-      return builder;
+      return this;
     },
 
-    onStart: (
-      hook: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) => void
-    ) => {
+    onStart: function (hook: TypedHook<TState, TConfig>) {
+      const ctx = createCachedContext(context, dependencies, api);
       hookManager.addStartHook(
-        hook,
-        { ...context, ...Object.fromEntries(dependencies), ...api }
+        hook as TypedHook<TState, TConfig>,
+        ctx
       );
-      return builder;
+      return this;
     },
 
-    onStop: (
-      hook: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) => void
-    ) => {
-      hookManager.addStopHook(hook);
-      return builder;
+    onStop: function (hook: TypedHook<TState, TConfig>) {
+      hookManager.addStopHook(hook as TypedHook<TState, TConfig>);
+      return this;
     },
 
-    start: () => hookManager.start({ ...context, ...Object.fromEntries(dependencies), ...api }),
-
-    stop: () => hookManager.stop({ ...context, ...Object.fromEntries(dependencies), ...api }),
-
-    pipe: <K extends string, V>(
-      key: K,
-      fn: (ctx: AlvamindContext<TState, TConfig> & Record<string, unknown>) => V
-    ) => {
-      return createPipe(context, dependencies, api)(builder, key, fn);
+    start: function () {
+      const ctx = createCachedContext(context, dependencies, api);
+      hookManager.start(ctx as any); // (cast to any)
     },
 
+    stop: function () {
+      const ctx = createCachedContext(context, dependencies, api);
+      hookManager.stop(ctx as any); // (cast to any)
+    }
   };
 
+  // Create the builder instance with the shared prototype.
+  const builder = Object.create(builderPrototype);
   return builder as BuilderInstance<TState, TConfig, DependencyRecord, TApi>;
+}
+
+/**
+ * Clears the cached contexts. Useful for testing or memory management.
+ */
+export function clearBuilderCaches() {
+  contextCache = new WeakMap(); // Reset the cache
 }
