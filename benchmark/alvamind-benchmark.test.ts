@@ -5,18 +5,6 @@ import { treaty } from '@elysiajs/eden';
 import Alvamind from "./minimal-alvamind";
 
 
-// Helper: Improved deepFreeze with type safety
-function deepFreeze<T>(obj: T): T {
-  Object.freeze(obj);
-  Object.getOwnPropertyNames(obj).forEach((prop) => {
-    const value = (obj as any)[prop];
-    if (value && (typeof value === "object" || typeof value === "function") && !Object.isFrozen(value)) {
-      deepFreeze(value);
-    }
-  });
-  return obj;
-}
-
 // --- Alvamind Implementation ---
 function createAlvamindUserSystem() {
   interface UserState { users: Array<{ id: string; name: string }>; currentUser: string | null; }
@@ -288,31 +276,7 @@ async function main() {
     };
   });
 
-  // --- Print Results Table ---
-  console.log(titleStyle("\n=== Implementation Comparison Results (Average of " + numRuns + " Runs) ===\n"));
 
-  const headers = ["Metric", "Alvamind", "Elysia", "OOP", "Plain"];
-  const columnColors = [labelStyle, successStyle, warningStyle, errorStyle, chalk.white];
-  const metrics: { [key: string]: (r: BenchmarkResult) => string } = {
-    "Ops/sec": r => r.operationsPerSecond.toLocaleString(),
-    "Memory (KB)": r => (r.memoryUsage / 1024).toFixed(3), // Display in KB with 3 decimal places
-    "CPU (ms)": r => r.cpuUsage.toFixed(2),
-    "Method Sharing": r => r.methodSharing ? "Yes" : "No",
-    "Immutability": r => r.stateImmutability ? "Yes" : "No",
-    "Plugin System": r => r.pluginSystem ? "Yes" : "No",
-    "Extensibility": r => "★".repeat(r.extensibility),
-    "Complexity": r => "★".repeat(r.complexity),
-  };
-
-  const rows = Object.entries(metrics).map(([metric, formatter]) => [
-    metric,
-    formatter(avgResults[0]),
-    formatter(avgResults[1]),
-    formatter(avgResults[2]),
-    formatter(avgResults[3]),
-  ]);
-
-  printTable(headers, rows, columnColors);
 
   // --- Qualitative Analysis ---
   console.log(titleStyle("\n=== Qualitative Analysis ==="));
@@ -442,6 +406,33 @@ async function main() {
   // Plain Object
   const extendedPlain = { ...createPlainUserSystem(), getUserCount: function () { return this.getUsers().length; } };
   console.log("Plain Object Extension (getUserCount):", typeof extendedPlain.getUserCount === 'function');
+
+
+  // --- Print Results Table ---
+  console.log(titleStyle("\n=== Implementation Comparison Results (Average of " + numRuns + " Runs) ===\n"));
+
+  const headers = ["Metric", "Alvamind", "Elysia", "OOP", "Plain"];
+  const columnColors = [labelStyle, successStyle, warningStyle, errorStyle, chalk.white];
+  const metrics: { [key: string]: (r: BenchmarkResult) => string } = {
+    "Ops/sec": r => r.operationsPerSecond.toLocaleString(),
+    "Memory (KB)": r => (r.memoryUsage / 1024).toFixed(3), // Display in KB with 3 decimal places
+    "CPU (ms)": r => r.cpuUsage.toFixed(2),
+    "Method Sharing": r => r.methodSharing ? "Yes" : "No",
+    "Immutability": r => r.stateImmutability ? "Yes" : "No",
+    "Plugin System": r => r.pluginSystem ? "Yes" : "No",
+    "Extensibility": r => "★".repeat(r.extensibility),
+    "Complexity": r => "★".repeat(r.complexity),
+  };
+
+  const rows = Object.entries(metrics).map(([metric, formatter]) => [
+    metric,
+    formatter(avgResults[0]),
+    formatter(avgResults[1]),
+    formatter(avgResults[2]),
+    formatter(avgResults[3]),
+  ]);
+
+  printTable(headers, rows, columnColors);
 
   // --- Cleanup ---
   if (typeof global.gc === 'function') {
