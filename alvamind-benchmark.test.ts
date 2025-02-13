@@ -54,7 +54,7 @@ function createElysiaUserSystem() {
   interface UserState { users: Array<{ id: string; name: string }>; currentUser: string | null; }
   const initialState: UserState = { users: [], currentUser: null, };
 
-  return new Elysia({ aot: false })
+  return new Elysia()
     .state("userState", initialState)
     .derive(({ store: { userState } }) => ({
       addUser: (user: { id: string; name: string }) => {
