@@ -2,7 +2,8 @@
 import { Elysia } from "elysia";
 import chalk, { Chalk } from 'chalk';
 import { treaty } from '@elysiajs/eden';
-import Alvamind from "./src/core/alvamind";
+import Alvamind from "./minimal-alvamind";
+
 
 // Helper: Improved deepFreeze with type safety
 function deepFreeze<T>(obj: T): T {
@@ -53,7 +54,7 @@ function createElysiaUserSystem() {
   interface UserState { users: Array<{ id: string; name: string }>; currentUser: string | null; }
   const initialState: UserState = { users: [], currentUser: null, };
 
-  return new Elysia()
+  return new Elysia({ aot: false })
     .state("userState", initialState)
     .derive(({ store: { userState } }) => ({
       addUser: (user: { id: string; name: string }) => {
