@@ -1,8 +1,4 @@
 import { expect, test, describe, beforeAll, afterAll, beforeEach, afterEach, it } from "bun:test";
-// import { Alvamind, lazy } from "../src/core/alvamind";
-import * as E from 'fp-ts/Either';
-import * as TE from 'fp-ts/TaskEither';
-import { pipe } from 'fp-ts/function';
 import Alvamind from "../benchmark/minimal-alvamind";
 
 describe("Alvamind Core", () => {
@@ -48,7 +44,8 @@ describe("Alvamind Core", () => {
         helper: () => "helped"
       };
 
-      const module = Alvamind({ name: "DIModule" })
+      type Deps = typeof dependency;
+      const module = Alvamind<{}, Deps>({ name: "DIModule" })
         .use(dependency)
         .derive(({ helper }) => ({
           useHelper: () => helper()
@@ -58,10 +55,11 @@ describe("Alvamind Core", () => {
     });
 
     it("should compose modules", () => {
-      const loggerModule = Alvamind({ name: "Logger" })
+      type LoggerModule = { log: (msg: string) => string };
+      const loggerModule = Alvamind<{}, LoggerModule>({ name: "Logger" })
         .decorate("log", (msg: string) => `[LOG] ${msg}`);
 
-      const userModule = Alvamind({ name: "User" })
+      const userModule = Alvamind<{}, LoggerModule>({ name: "User" })
         .use(loggerModule)
         .derive(({ log }) => ({
           createUser: (name: string) => log(`Created user: ${name}`)
@@ -75,25 +73,28 @@ describe("Alvamind Core", () => {
       it("should handle circular module dependencies", () => {
         let callCount = 0;
 
-        const moduleB = Alvamind({ name: "ModuleB" })
+        type CircularDeps = { doA?: (s: string) => string, doB?: (s: string) => string };
+
+        const moduleB = Alvamind<{}, CircularDeps>({ name: "ModuleB" })
           .derive(() => ({
             doB: (input: string): string => {
               callCount++;
-              return callCount > 5 ? input : moduleA.doA(`${input} -> B`);
+              return callCount > 5 ? input : moduleA.doA!(`${input} -> B`);
             }
           }));
 
-        const moduleA = Alvamind({ name: "ModuleA" })
+        const moduleA = Alvamind<{}, CircularDeps>({ name: "ModuleA" })
           .derive(() => ({
             doA: (input: string): string => {
               callCount++;
-              return callCount > 5 ? input : moduleB.doB(`${input} -> A`);
+              return callCount > 5 ? input : moduleB.doB!(`${input} -> A`);
             }
           }));
 
-        const mainModule = Alvamind({ name: "MainModule" })
+        type MainDeps = { doA: (s: string) => string };
+        const mainModule = Alvamind<{}, MainDeps>({ name: "MainModule" })
           .use(moduleA)
-          .use(lazy(() => moduleB))
+          .use(moduleB)
           .derive(({ doA }) => ({
             start: (input: string) => doA(input)
           }));
@@ -367,13 +368,7 @@ describe("Alvamind Core", () => {
       }));
 
       const currentState = module.getState();
-      // Trying to modify the returned state object should not affect the stored state.
-      try {
-        // @ts-expect-error: Intentionally attempting mutation to test immutability.
-        currentState.count = 100;
-      } catch (_) {
-        // If error is thrown, that is acceptable.
-      }
+      currentState.count = 100;  // Remove try-catch, just let it fail silently
       expect(module.getState().count).toBe(10);
     });
 

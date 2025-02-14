@@ -19,21 +19,29 @@ type State<T> = Readonly<{
 // Optimized core types
 type Methods<T> = Record<string, Fn>;
 type Core<S, C, M extends Methods<any>> = Readonly<{
-  state: Pick<State<S>, 'get' | 'set'>;
-  config: C;
+  state: State<S>;
+  config: C & {};
   inject: <T extends Methods<any>>(m: T) => Core<S, C, M & T>;
   derive: <D extends Methods<any>>(fn: (c: CoreCtx<S, C, M>) => D) => Core<S, C, M & D>;
   watch: <K extends keyof S>(k: K, fn: (n: S[K], p: S[K]) => void) => Core<S, C, M>;
-  use: <D extends Methods<any>>(d: D) => Core<S, C, M & D>;
+  use: <D extends Record<string, any>>(d: D) => Core<S, C, M & D>;
+  decorate: <K extends string, V>(k: K, v: V) => Core<S, C, M & Record<K, V>>;
   pipe: <N extends string, F extends Fn>(n: N, fn: (c: PipeCtx<S, C, M>) => F) => Core<S, C, M & Record<N, F>>;
   start: () => Core<S, C, M>;
-  onStart: (fn: (c: Pick<CoreCtx<S, C, M>, 'state' | 'config'>) => void) => Core<S, C, M>;
+  onStart: (fn: (c: CoreCtx<S, C, M>) => void) => Core<S, C, M>;
   onStop: (fn: () => void) => Core<S, C, M>;
-  stop: () => Core<S, C, M>;
+  stop: () => void;
 }> & M;
 
-type CoreCtx<S, C, M extends Methods<any>> = Readonly<{ state: State<S>; config: C; id: number }> & M;
-type PipeCtx<S, C, M extends Methods<any>> = CoreCtx<S, C, M> & { pipe: <T, F extends Fn[]>(i: T, ...fns: F) => ReturnType<F[number]> };
+type CoreCtx<S, C, M extends Methods<any>> = {
+  readonly state: State<S>;
+  readonly config: C;
+  readonly id: number;
+} & M;
+
+type PipeCtx<S, C, M extends Methods<any>> = CoreCtx<S, C, M> & {
+  pipe: <T, R>(input: T, ...fns: Array<(arg: any) => any>) => R;
+};
 
 // Optimized implementation
 const statePool = new WeakMap<object, State<any>>();
@@ -86,7 +94,7 @@ const create = <S extends object, C, M extends Methods<any> = {}>(
   const stops: Fn[] = [];
 
   const instance = {
-    state: { get: state.get, set: state.set },
+    state,
     config,
     inject: m => (Object.entries(m).forEach(([k, v]) => methods.set(k, v)), instance),
     derive: fn => {
@@ -98,12 +106,30 @@ const create = <S extends object, C, M extends Methods<any> = {}>(
       return Object.assign(instance, cache.get(fn));
     },
     watch: (k, fn) => (state.add((n, p) => n[k] !== p[k] && fn(n[k], p[k])), instance),
-    use: dep => instance.inject(dep),
-    pipe: (n, fn) => ((instance as any)[n] = fn({ ...instance, pipe: (i, ...fns) => fns.reduce((a, f) => f(a), i) }), instance),
+    use: dep => instance.inject(dep as Methods<any>),
+    decorate: (k, v) => ((instance as any)[k] = v, instance),
+    pipe: (n, fn) => {
+      const pipeCtx: PipeCtx<S, C, M> = {
+        state,
+        config,
+        id,
+        ...Object.fromEntries(methods),
+        pipe: <T, R>(input: T, ...fns: Array<(arg: any) => any>): R =>
+          fns.reduce((acc, fn) => fn(acc), input) as R
+      };
+      (instance as any)[n] = fn(pipeCtx);
+      return instance;
+    },
     start: () => instance,
-    onStart: fn => (!started && (fn({ state: instance.state, config }), started = true), instance),
+    onStart: fn => {
+      if (!started) {
+        fn({ state, config, id, ...Object.fromEntries(methods) } as CoreCtx<S, C, M>);
+        started = true;
+      }
+      return instance;
+    },
     onStop: fn => (stops.push(fn), instance),
-    stop: () => (stops.forEach(fn => fn()), instance)
+    stop: () => stops.forEach(fn => fn())
   } as Core<S, C, M>;
 
   return instance;
