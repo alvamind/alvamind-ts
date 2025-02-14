@@ -1,9 +1,9 @@
 // Ultra-Optimized Alvamind Core (v2.0)
 
 // Optimized types
-type Fn<A extends any[] = any[], R = any> = (...args: A) => R;
-type StateListener<T> = (n: T, p: T) => void;
-type State<T> = Readonly<{
+export type Fn<A extends any[] = any[], R = any> = (...args: A) => R;
+export type StateListener<T> = (n: T, p: T) => void;
+export type State<T> = Readonly<{
   get: () => T;
   set: (s: Partial<T>) => void;
   current: T;
@@ -12,8 +12,8 @@ type State<T> = Readonly<{
 }>;
 
 // Optimized core types
-type Methods<T> = Record<string, Fn>;
-type Core<S, C, M extends Methods<any>> = Readonly<{
+export type Methods<T> = Record<string, Fn>;
+export type Core<S, C, M extends Methods<any>> = Readonly<{
   state: State<S>;
   config: C & {};
   inject: <T extends Methods<any>>(m: T) => Core<S, C, M & T>;
@@ -28,13 +28,13 @@ type Core<S, C, M extends Methods<any>> = Readonly<{
   stop: () => void;
 }> & M;
 
-type CoreCtx<S, C, M extends Methods<any>> = {
+export type CoreCtx<S, C, M extends Methods<any>> = {
   readonly state: State<S>;
   readonly config: C;
   readonly id: number;
 } & M;
 
-type PipeCtx<S, C, M extends Methods<any>> = CoreCtx<S, C, M> & {
+export type PipeCtx<S, C, M extends Methods<any>> = CoreCtx<S, C, M> & {
   pipe: <T, R>(input: T, ...fns: Array<(arg: any) => any>) => R;
 };
 

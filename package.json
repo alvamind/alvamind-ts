@@ -1,15 +1,13 @@
 {
   "name": "alvamind",
-  "version": "1.0.4",
-  "description": "automatically create TypeScript interfaces and types that mirror your Prisma schema models and enums",
+  "version": "1.0.5",
+  "description": "A lightweight state management library",
   "keywords": [
     "state-management",
-    "dependency-injection",
-    "typescript",
-    "fp-ts"
+    "typescript"
   ],
   "type": "module",
-  "author": "Alvamind",
+  "author": "",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -24,13 +22,12 @@
     }
   },
   "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
+    "dist"
   ],
   "devDependencies": {
     "@types/bun": "latest",
-    "tinybench": "^3.1.1"
+    "tinybench": "^3.1.1",
+    "typescript": "^4.9.0"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
