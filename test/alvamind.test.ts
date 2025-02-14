@@ -1,8 +1,9 @@
 import { expect, test, describe, beforeAll, afterAll, beforeEach, afterEach, it } from "bun:test";
-import { Alvamind, lazy } from "./alvamind";
+// import { Alvamind, lazy } from "../src/core/alvamind";
 import * as E from 'fp-ts/Either';
 import * as TE from 'fp-ts/TaskEither';
 import { pipe } from 'fp-ts/function';
+import Alvamind from "../benchmark/minimal-alvamind";
 
 describe("Alvamind Core", () => {
 
