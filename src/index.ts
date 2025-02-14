@@ -3,11 +3,8 @@ export { default } from './core/alvamind-core';
 // Export types
 export type {
     Core,
-    CoreCtx,
-    PipeCtx,
     State,
     StateListener,
-    Methods,
 } from './core/alvamind-core';
 
 // Re-export utilities

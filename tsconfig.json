@@ -1,9 +1,10 @@
 {
   "compilerOptions": {
-    "target": "es2018",
-    "module": "commonjs",
+    "target": "esnext",
+    "module": "esnext",
     "lib": [
-      "ES2020"
+      "esnext",
+      "dom"
     ],
     "declaration": true,
     "declarationMap": true,
@@ -14,7 +15,10 @@
     "moduleResolution": "bundler",
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "types": [
+      "bun-types"
+    ]
   },
   "include": [
     "src"
