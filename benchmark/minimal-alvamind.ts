@@ -109,14 +109,14 @@ const create = <S extends object, C, M extends Methods<any> = {}>(
     use: dep => instance.inject(dep as Methods<any>),
     decorate: (k, v) => ((instance as any)[k] = v, instance),
     pipe: (n, fn) => {
-      const pipeCtx: PipeCtx<S, C, M> = {
+      const pipeCtx = {
+        ...Object.fromEntries(methods),
         state,
         config,
         id,
-        ...Object.fromEntries(methods),
         pipe: <T, R>(input: T, ...fns: Array<(arg: any) => any>): R =>
           fns.reduce((acc, fn) => fn(acc), input) as R
-      };
+      } as PipeCtx<S, C, M>;
       (instance as any)[n] = fn(pipeCtx);
       return instance;
     },

@@ -45,7 +45,7 @@ describe("Alvamind Core", () => {
       };
 
       type Deps = typeof dependency;
-      const module = Alvamind<{}, Deps>({ name: "DIModule" })
+      const module = Alvamind({ name: "DIModule" })
         .use(dependency)
         .derive(({ helper }) => ({
           useHelper: () => helper()
