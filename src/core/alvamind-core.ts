@@ -46,30 +46,30 @@ const createState = <T extends object>(init: T): State<T> => {
   if (cached) return cached;
 
   const listeners = new Set<StateListener<T>>();
-  let current = init;
+  let current = Object.freeze({ ...init });
   let batching = false;
-  const updates: (() => void)[] = [];
+  let pendingUpdates: Partial<T>[] = [];
 
   const state: State<T> = {
-    get: () => current,
+    get: () => ({ ...current }),
     set: (next) => {
-      const update = () => {
-        const prev = current;
-        current = Object.freeze({ ...current, ...next }) as T;
-        listeners.forEach(fn => fn(current, prev));
-      };
-      updates.push(update);
+      pendingUpdates.push(next);
 
       if (!batching) {
         batching = true;
         queueMicrotask(() => {
-          const pending = updates.splice(0);
-          for (const fn of pending) fn();
+          const prev = current;
+          const merged = pendingUpdates.reduce((acc, update) => ({ ...acc, ...update }), current);
+          current = Object.freeze({ ...merged });
+          pendingUpdates = [];
           batching = false;
+          if (JSON.stringify(prev) !== JSON.stringify(current)) {
+            listeners.forEach(fn => fn(current, prev));
+          }
         });
       }
     },
-    current,
+    get current() { return { ...current }; },
     add: fn => void listeners.add(fn),
     remove: fn => void listeners.delete(fn)
   };
@@ -96,7 +96,9 @@ const create = <S extends object, C, M extends Methods<any> = {}>(
       const cached = cache.get(fn);
       if (!cached) {
         const ctx = { state, config, id, ...Object.fromEntries(methods) } as CoreCtx<S, C, M>;
-        cache.set(fn, fn(ctx));
+        const derived = fn(ctx);
+        cache.set(fn, derived);
+        Object.entries(derived).forEach(([k, v]) => methods.set(k, v));
       }
       return Object.assign(instance, cache.get(fn));
     },
@@ -109,11 +111,22 @@ const create = <S extends object, C, M extends Methods<any> = {}>(
         state,
         config,
         id,
-        pipe: <T, R>(input: T, ...fns: Array<(arg: any) => any>): R =>
-          fns.reduce((acc, fn) => fn(acc), input) as R
+        pipe: <T, R>(input: T, ...fns: Array<(arg: any) => any>): R => {
+          return fns.reduce((acc: unknown, fn) => {
+            if (typeof fn !== 'function') {
+              throw new Error('Pipe requires functions');
+            }
+            return fn(acc);
+          }, input) as R;
+        }
       } as PipeCtx<S, C, M>;
-      (instance as any)[n] = fn(pipeCtx);
-      return instance;
+
+      const pipeFunction = fn(pipeCtx);
+      if (typeof pipeFunction !== 'function') {
+        throw new Error('Pipe must return a function');
+      }
+      methods.set(n, pipeFunction);
+      return Object.assign(instance, { [n]: pipeFunction });
     },
     start: () => instance,
     onStart: fn => {
@@ -139,6 +152,12 @@ const Alvamind = <S extends object = {}, C = {}>(opts: { name: string; state?: S
 // Optimized utilities
 Alvamind.lazy = <T>(fn: () => T): T => fn();
 Alvamind.contextCache = new WeakMap();
-Alvamind.utils = { checksum: (s: string): number => s.split('').reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) >>> 0, 0) };
+Alvamind.utils = {
+  checksum: (s: string): number => s.split('').reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) >>> 0, 0),
+  typeCheck: {
+    isFunction: (fn: unknown): fn is Function => typeof fn === 'function',
+    isObject: (obj: unknown): obj is object => obj !== null && typeof obj === 'object'
+  }
+};
 
 export default Alvamind;

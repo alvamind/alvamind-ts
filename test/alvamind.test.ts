@@ -10,7 +10,7 @@ describe("Alvamind Core", () => {
     });
 
     it("should throw error if no name provided", () => {
-      expect(() => Alvamind({} as any)).toThrow("Alvamind module must have a name");
+      expect(() => Alvamind({} as any)).toThrow("Name required");
     });
 
     it("should initialize with state", () => {
