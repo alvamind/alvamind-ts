@@ -68,7 +68,7 @@ const createState = <T extends object>(init: T): State<T> => {
         queueMicrotask(() => {
           const prev = current;
           const merged = pendingUpdates.reduce((acc, update) => ({ ...acc, ...update }), current);
-          current = Object.freeze(merged);
+          current = Object.freeze(merged as T);
           pendingUpdates = [];
           batching = false;
 
