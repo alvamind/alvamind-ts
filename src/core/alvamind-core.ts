@@ -18,18 +18,27 @@ export type State<T> = Readonly<{
   remove: (fn: StateListener<T>) => void;
 }>;
 
-type Methods<T = any> = Record<string, Fn | Record<string, Fn> | T>;
-type BaseCtx<S, C, M> = Readonly<{ state: State<S>; config: C; id: number; flow: Flow }> & M;
-type CoreCtx<S, C, M> = BaseCtx<S, C, M>;
-type PipeCtx<S, C, M> = BaseCtx<S, C, M> & { pipe: <T, R>(input: T, ...fns: Array<(arg: any) => any>) => R };
+type Methods<T = never> = Record<string, Fn | Record<string, Fn> | T>;
+type Instance<S, C, M extends Methods> = Omit<Core<S, C, M>, keyof M> & M;
 
-export type Core<S = {}, C = {}, M extends Methods = {}> = Readonly<{
+type BaseCtx<S, C, M extends Methods> = Readonly<{
+  state: State<S>;
+  config: C;
+  id: number;
+  flow: Flow
+}> & M;
+type CoreCtx<S, C, M extends Methods> = BaseCtx<S, C, M>;
+type PipeCtx<S, C, M extends Methods> = BaseCtx<S, C, M> & {
+  pipe: <T, R>(input: T, ...fns: Array<(arg: any) => any>) => R
+};
+
+export type Core<S = {}, C = {}, M extends Methods = Methods> = Readonly<{
   state: State<S>;
   config: C;
   inject: <T extends Methods>(m: T) => Core<S, C, M & T>;
-  derive: <D>(fn: (c: CoreCtx<S, C, M>) => D) => Core<S, C, M & D>;
+  derive: <D extends Methods>(fn: (c: CoreCtx<S, C, M>) => D) => Core<S, C, M & D>;
   watch: <K extends keyof S>(k: K, fn: (n: S[K], p: S[K]) => void) => Core<S, C, M>;
-  use: <D>(d: D) => Core<S, C, M & D>;
+  use: <D extends Methods>(d: D) => Core<S, C, M & D>;
   decorate: <K extends string, V>(k: K, v: V) => Core<S, C, M & Record<K, V>>;
   pipe: <N extends string, F extends Fn>(n: N, fn: (c: PipeCtx<S, C, M>) => F) => Core<S, C, M & Record<N, F>>;
   flow: <N extends string, F extends Fn>(n: N, fn: (c: CoreCtx<S, C, M>) => F) => Core<S, C, M & Record<N, F>>;
@@ -76,7 +85,7 @@ const createState = <T extends object>(init: T): State<T> => {
   return state;
 };
 
-const create = <S extends object = {}, C = {}, M extends Methods = {}>(
+const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
   state: State<S>,
   config: C,
   id = Date.now()
@@ -91,44 +100,69 @@ const create = <S extends object = {}, C = {}, M extends Methods = {}>(
       return rest.reduce((result, fn) => fn(result), first(...args));
     };
   };
+
   const baseCtx = { state, config, id, flow };
 
-  const instance = {
+  const instance: Instance<S, C, M> = {
     ...baseCtx,
-    inject: m => (Object.entries(m).forEach(([k, v]) => methods.set(k, v)), instance),
-    derive: fn => {
+    inject<T extends Methods>(m: T) {
+      Object.entries(m).forEach(([k, v]) => methods.set(k, v));
+      return this as unknown as Core<S, C, M & T>;
+    },
+    derive<D extends Methods>(fn: (c: CoreCtx<S, C, M>) => D) {
       const cached = methodsCache.get(fn) ?? (() => {
         const derived = fn({ ...baseCtx, ...Object.fromEntries(methods) } as CoreCtx<S, C, M>);
         methodsCache.set(fn, derived);
         Object.entries(derived).forEach(([k, v]) => methods.set(k, v));
         return derived;
       })();
-      return Object.assign(instance, cached);
+      return Object.assign(this, cached) as unknown as Core<S, C, M & D>;
     },
-    watch: (k, fn) => (state.add((n, p) => n[k] !== p[k] && fn(n[k], p[k])), instance),
-    use: dep => instance.inject(dep as Methods<any>),
-    decorate: (k, v) => ((instance as any)[k] = v, instance),
-    pipe: (n, fn) => {
+    watch<K extends keyof S>(k: K, fn: (n: S[K], p: S[K]) => void) {
+      state.add((n, p) => n[k] !== p[k] && fn(n[k], p[k]));
+      return this as unknown as Core<S, C, M>;
+    },
+    use<D extends Methods>(d: D) {
+      return this.inject(d);
+    },
+    decorate<K extends string, V>(k: K, v: V) {
+      (this as any)[k] = v;
+      return this as unknown as Core<S, C, M & Record<K, V>>;
+    },
+    pipe<N extends string, F extends Fn>(n: N, fn: (c: PipeCtx<S, C, M>) => F) {
       const pipeFunction = fn({
         ...baseCtx,
         ...Object.fromEntries(methods),
         pipe: (input, ...fns) => fns.reduce((acc, fn) => fn(acc), input)
       });
       methods.set(n, pipeFunction);
-      return Object.assign(instance, { [n]: pipeFunction });
+      return Object.assign(this, { [n]: pipeFunction }) as unknown as Core<S, C, M & Record<N, F>>;
     },
-    flow: (n, fn) => {
+    flow<N extends string, F extends Fn>(n: N, fn: (c: CoreCtx<S, C, M>) => F) {
       const flowFunction = fn({ ...baseCtx, ...Object.fromEntries(methods) });
       methods.set(n, flowFunction);
-      return Object.assign(instance, { [n]: flowFunction });
+      return Object.assign(this, { [n]: flowFunction }) as unknown as Core<S, C, M & Record<N, F>>;
     },
-    start: () => instance,
-    onStart: fn => (!started && (fn({ ...baseCtx, ...Object.fromEntries(methods) }), started = true), instance),
-    onStop: fn => (stops.push(fn), instance),
-    stop: () => stops.forEach(fn => fn())
-  } as Core<S, C, M>;
+    start() {
+      return this as unknown as Core<S, C, M>;
+    },
+    onStart(fn: (c: CoreCtx<S, C, M>) => void) {
+      if (!started) {
+        fn({ ...baseCtx, ...Object.fromEntries(methods) });
+        started = true;
+      }
+      return this as unknown as Core<S, C, M>;
+    },
+    onStop(fn: () => void) {
+      stops.push(fn);
+      return this as unknown as Core<S, C, M>;
+    },
+    stop() {
+      stops.forEach(fn => fn());
+    }
+  };
 
-  return instance;
+  return instance as unknown as Core<S, C, M>;
 };
 
 export default <S extends object = {}, C = {}>(opts: { name: string; state?: S; config?: C }): Core<S, C> => {
