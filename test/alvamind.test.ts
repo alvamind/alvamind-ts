@@ -208,6 +208,61 @@ describe("Alvamind Core", () => {
         expect(module.process(5)).toBe("Result: 11");
       });
     });
+
+    describe(".flow()", () => {
+      it("should support function flow composition", () => {
+        const module = Alvamind({ name: "FlowModule" })
+          .derive(({ flow }) => {
+            const add = (a: number, b: number) => a + b;
+            const multiplyByTwo = (n: number) => n * 2;
+            return {
+              add,
+              multiplyByTwo,
+              addAndDouble: flow(
+                (a: number, b: number) => add(a, b),
+                multiplyByTwo
+              )
+            };
+          });
+
+        expect(module.addAndDouble(3, 4)).toBe(14);
+      });
+    });
+
+    describe(".flow() chaining", () => {
+      it("should support flow method chaining", () => {
+        const module = Alvamind({ name: "FlowChainModule" })
+          .derive(() => ({
+            double: (n: number) => n * 2,
+            addOne: (n: number) => n + 1,
+            toString: (n: number) => `Result: ${n}`
+          }))
+          .flow("process", ({ flow, double, addOne, toString }) => {
+            return (input: number) => flow(
+              double,
+              addOne,
+              toString
+            )(input);
+          });
+
+        expect(module.process(5)).toBe("Result: 11");
+      });
+
+      it("should support both pipe and flow in same chain", () => {
+        const module = Alvamind({ name: "CompositionModule" })
+          .derive(() => ({
+            double: (n: number) => n * 2,
+            addOne: (n: number) => n + 1
+          }))
+          .pipe("withPipe", ({ pipe, double, addOne }) => (n: number) =>
+            pipe(n, double, addOne))
+          .flow("withFlow", ({ flow, double, addOne }) => (n: number) =>
+            flow(double, addOne)(n));
+
+        expect(module.withPipe(5)).toBe(11);
+        expect(module.withFlow(5)).toBe(11);
+      });
+    });
   });
 
   describe("Lifecycle Hooks", () => {
@@ -370,6 +425,25 @@ describe("Alvamind Core", () => {
       const currentState = module.getState();
       currentState.count = 100;  // Remove try-catch, just let it fail silently
       expect(module.getState().count).toBe(10);
+    });
+
+    it("should support nested object structures in derive", () => {
+      const fileUtils = Alvamind({ name: 'test.fileUtils' })
+        .decorate('fileUtils', {
+          getFileName: () => 'test.ts'
+        });
+
+      const loggerModule = Alvamind({ name: 'test.logger' })
+        .use(fileUtils)
+        .derive(({ fileUtils, }) => ({
+          log: {
+            info: (msg: string) => `[INFO] ${msg} (${fileUtils.getFileName()})`,
+            error: (msg: string) => `[ERROR] ${msg} (${fileUtils.getFileName()})`
+          }
+        }));
+
+      expect(loggerModule.log.info("test message")).toBe("[INFO] test message (test.ts)");
+      expect(loggerModule.log.error("error message")).toBe("[ERROR] error message (test.ts)");
     });
 
   });
