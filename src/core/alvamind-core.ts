@@ -18,8 +18,11 @@ export type State<T> = Readonly<{
   remove: (fn: StateListener<T>) => void;
 }>;
 
+// Update Methods type to handle nested functions better
 type Methods<T = never> = Record<string, Fn | Record<string, Fn> | T>;
-type Instance<S, C, M extends Methods> = Omit<Core<S, C, M>, keyof M> & M;
+
+// Modify Instance type to better handle method inheritance
+type Instance<S, C, M extends Methods> = Omit<Core<S, C, M>, keyof M> & Partial<M>;
 
 type BaseCtx<S, C, M extends Methods> = Readonly<{
   state: State<S>;
@@ -90,7 +93,7 @@ const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
   config: C,
   id = Date.now()
 ): Core<S, C, M> => {
-  const methods = new Map<string, Fn>();
+  const methods = new Map<string, any>();
   const stops: Fn[] = [];
   let started = false;
 
@@ -103,15 +106,22 @@ const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
 
   const baseCtx = { state, config, id, flow };
 
-  const instance: Instance<S, C, M> = {
+  // Helper functions for DRY context creation
+  const coreCtx = () => ({ ...baseCtx, ...Object.fromEntries(methods) } as CoreCtx<S, C, M>);
+  const pipeCtx = () => ({
+    ...coreCtx(),
+    pipe: (input: any, ...fns: Array<(arg: any) => any>) => fns.reduce((acc, fn) => fn(acc), input)
+  } as PipeCtx<S, C, M>);
+
+  const instance = {
     ...baseCtx,
     inject<T extends Methods>(m: T) {
-      Object.entries(m).forEach(([k, v]) => methods.set(k, v));
-      return this as unknown as Core<S, C, M & T>;
+      Object.entries(m).forEach(([k, v]) => methods.set(k, v as any));
+      return this as any as Core<S, C, M & T>;
     },
     derive<D extends Methods>(fn: (c: CoreCtx<S, C, M>) => D) {
       const cached = methodsCache.get(fn) ?? (() => {
-        const derived = fn({ ...baseCtx, ...Object.fromEntries(methods) } as CoreCtx<S, C, M>);
+        const derived = fn(coreCtx());
         methodsCache.set(fn, derived);
         Object.entries(derived).forEach(([k, v]) => methods.set(k, v));
         return derived;
@@ -122,7 +132,7 @@ const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
       state.add((n, p) => n[k] !== p[k] && fn(n[k], p[k]));
       return this as unknown as Core<S, C, M>;
     },
-    use<D extends Methods>(d: D) {
+    use<D extends Methods>(this: Core<S, C, M>, d: D) {
       return this.inject(d);
     },
     decorate<K extends string, V>(k: K, v: V) {
@@ -130,25 +140,21 @@ const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
       return this as unknown as Core<S, C, M & Record<K, V>>;
     },
     pipe<N extends string, F extends Fn>(n: N, fn: (c: PipeCtx<S, C, M>) => F) {
-      const pipeFunction = fn({
-        ...baseCtx,
-        ...Object.fromEntries(methods),
-        pipe: (input, ...fns) => fns.reduce((acc, fn) => fn(acc), input)
-      });
+      const pipeFunction = fn(pipeCtx());
       methods.set(n, pipeFunction);
-      return Object.assign(this, { [n]: pipeFunction }) as unknown as Core<S, C, M & Record<N, F>>;
+      return Object.assign(this, { [n]: pipeFunction }) as any as Core<S, C, M & Record<N, F>>;
     },
     flow<N extends string, F extends Fn>(n: N, fn: (c: CoreCtx<S, C, M>) => F) {
-      const flowFunction = fn({ ...baseCtx, ...Object.fromEntries(methods) });
+      const flowFunction = fn(coreCtx());
       methods.set(n, flowFunction);
-      return Object.assign(this, { [n]: flowFunction }) as unknown as Core<S, C, M & Record<N, F>>;
+      return Object.assign(this, { [n]: flowFunction }) as any as Core<S, C, M & Record<N, F>>;
     },
     start() {
       return this as unknown as Core<S, C, M>;
     },
     onStart(fn: (c: CoreCtx<S, C, M>) => void) {
       if (!started) {
-        fn({ ...baseCtx, ...Object.fromEntries(methods) });
+        fn(coreCtx());
         started = true;
       }
       return this as unknown as Core<S, C, M>;
@@ -160,7 +166,7 @@ const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
     stop() {
       stops.forEach(fn => fn());
     }
-  };
+  } as unknown as Instance<S, C, M>;
 
   return instance as unknown as Core<S, C, M>;
 };
