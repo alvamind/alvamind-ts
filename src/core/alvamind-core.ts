@@ -1,10 +1,5 @@
 // Ultra-Optimized Alvamind Core (v2.0)
 
-// Optimized utility with bit manipulation
-const checksum = (s: string): number => {
-  return s.split('').reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) >>> 0, 0);
-};
-
 // Optimized types
 type Fn<A extends any[] = any[], R = any> = (...args: A) => R;
 type StateListener<T> = (n: T, p: T) => void;

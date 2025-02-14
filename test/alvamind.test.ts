@@ -1,5 +1,5 @@
 import { expect, test, describe, beforeAll, afterAll, beforeEach, afterEach, it } from "bun:test";
-import Alvamind from "../benchmark/minimal-alvamind";
+import Alvamind from "../src/core/alvamind-core";
 
 describe("Alvamind Core", () => {
 

@@ -2,7 +2,7 @@
 import { Elysia } from "elysia";
 import chalk, { Chalk } from 'chalk';
 import { treaty } from '@elysiajs/eden';
-import Alvamind from "./minimal-alvamind";
+import Alvamind from "../src/core/alvamind-core";
 
 
 // --- Alvamind Implementation ---
