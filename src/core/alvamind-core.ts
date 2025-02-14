@@ -41,6 +41,14 @@ type PipeCtx<S, C, M extends Methods<any>> = CoreCtx<S, C, M> & {
 // Optimized implementation
 const statePool = new WeakMap<object, State<any>>();
 
+const shallowEqual = (a: any, b: any): boolean => {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  return keys.every(k => a[k] === b[k]);
+};
+
 const createState = <T extends object>(init: T): State<T> => {
   const cached = statePool.get(init);
   if (cached) return cached;
@@ -51,7 +59,7 @@ const createState = <T extends object>(init: T): State<T> => {
   let pendingUpdates: Partial<T>[] = [];
 
   const state: State<T> = {
-    get: () => ({ ...current }),
+    get: () => current,
     set: (next) => {
       pendingUpdates.push(next);
 
@@ -60,16 +68,17 @@ const createState = <T extends object>(init: T): State<T> => {
         queueMicrotask(() => {
           const prev = current;
           const merged = pendingUpdates.reduce((acc, update) => ({ ...acc, ...update }), current);
-          current = Object.freeze({ ...merged });
+          current = Object.freeze(merged);
           pendingUpdates = [];
           batching = false;
-          if (JSON.stringify(prev) !== JSON.stringify(current)) {
+
+          if (!shallowEqual(prev, current)) {
             listeners.forEach(fn => fn(current, prev));
           }
         });
       }
     },
-    get current() { return { ...current }; },
+    get current() { return current; },
     add: fn => void listeners.add(fn),
     remove: fn => void listeners.delete(fn)
   };
