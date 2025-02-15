@@ -180,8 +180,8 @@ const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
       return this.inject(d);
     },
     decorate<K extends string, V>(k: K, v: V) {
-      (this as any)[k] = v;
-      return this as unknown as Core<S, C, M & Record<K, V>>;
+      methods.set(k, v);
+      return Object.assign(this, { [k]: v }) as unknown as Core<S, C, M & Record<K, V>>;
     },
     pipe<N extends string, F extends Fn>(n: N, fn: (c: PipeCtx<S, C, M>) => F) {
       const pipeFunction = fn(pipeCtx());
