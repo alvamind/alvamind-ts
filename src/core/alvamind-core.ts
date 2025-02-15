@@ -122,14 +122,22 @@ const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
   let isInitializing = false;
   let pendingDeps = new Set<string>();
 
-  // Modified safeMerge to handle undefined properties
+  // Add circular dependency tracking
+  const dependencyStack = new Set<string>();
+
+  // Modified safeMerge to better handle undefined and circular refs
   const safeMerge = (target: any, source: any): any => {
     if (typeof source !== 'object' || source === null) {
       return source ?? target;
     }
     const result = { ...target };
     for (const key in source) {
-      result[key] = source[key] ?? target?.[key];
+      if (dependencyStack.has(key)) {
+        // Return existing value for circular refs
+        result[key] = target?.[key];
+      } else {
+        result[key] = source[key] ?? target?.[key];
+      }
     }
     return result;
   };
@@ -170,23 +178,27 @@ const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
     inject<T extends Methods>(m: T) {
       const filtered = filterCoreMethods(m);
       Object.entries(filtered).forEach(([k, v]) => {
-        if (pendingDeps.has(k)) {
-          // Skip circular references during initialization
-          return;
-        }
+        if (pendingDeps.has(k)) return;
+        if (dependencyStack.has(k)) return;
+        dependencyStack.add(k);
         methods.set(k, typeof v === 'object' ? safeMerge(methods.get(k) || {}, v) : v);
+        dependencyStack.delete(k);
       });
       return Object.assign(this, Object.fromEntries(methods)) as any as Core<S, C, M & T>;
     },
     derive<D extends Methods>(this: Core<S, C, M>, fn: (c: CoreCtx<S, C, M>) => D) {
-      if (isInitializing) {
-        // Return empty object for circular dependencies during initialization
-        return this as any;
-      }
+      if (isInitializing) return this as any;
       isInitializing = true;
       try {
         const ctx = coreCtx();
-        const derived = methodsCache.get(fn) ?? fn(ctx);
+        // Add safe default for uninitialized dependencies
+        const safeCtx = new Proxy(ctx, {
+          get: (target, prop) => {
+            if (prop in target) return target[prop as keyof typeof target];
+            return {}; // Return empty object for uninitialized deps
+          }
+        });
+        const derived = methodsCache.get(fn) ?? fn(safeCtx);
         methodsCache.set(fn, derived);
         const result = this.inject(derived);
         isInitializing = false;
@@ -201,7 +213,11 @@ const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
       return this as unknown as Core<S, C, M>;
     },
     use<D extends Methods>(this: Core<S, C, M>, d: D) {
-      return this.inject(d);
+      if (!d) return this as any;
+      pendingDeps.add(name || '');
+      const result = this.inject(d);
+      pendingDeps.delete(name || '');
+      return result;
     },
     decorate<K extends string, V>(k: K, v: V) {
       methods.set(k, v);

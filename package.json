@@ -1,6 +1,6 @@
 {
   "name": "alvamind",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "A lightweight state management library",
   "keywords": [
     "state-management",

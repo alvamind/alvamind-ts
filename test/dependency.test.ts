@@ -600,10 +600,10 @@ describe('Alvamind Advanced Circular Dependency Tests', () => {
             .derive(({ db, cache }): ServiceModule => ({
                 service: {
                     getData: async () => {
-                        const cached = await cache.cache.get<string[]>('data');
+                        const cached = await cache.get<string[]>('data');
                         if (cached) return cached;
-                        const data = await db.db.query<string>('SELECT data');
-                        await cache.cache.set('data', data);
+                        const data = await db.query<string>('SELECT data');
+                        await cache.set('data', data);
                         return data;
                     },
                     processData: async (data) => data.join(',')
