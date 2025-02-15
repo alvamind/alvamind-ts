@@ -143,15 +143,11 @@ const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
 
   const baseCtx = { state, config, id, flow };
 
-  // Improved context creation with deep merging
+  // Simplified context merging that preserves array references
   const mergeContexts = (base: any, entries: [string, any][]) => {
     const merged = { ...base };
     entries.forEach(([key, value]) => {
-      if (typeof value === 'object' && value !== null) {
-        merged[key] = { ...(merged[key] || {}), ...value };
-      } else {
-        merged[key] = value;
-      }
+      merged[key] = value; // Direct assignment preserves array behavior
     });
     return merged;
   };

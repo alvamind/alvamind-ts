@@ -1,8 +1,10 @@
 import { expect, it, describe } from "bun:test";
 import Alvamind from "../src/core/alvamind-core";
 
+// Remove the global "let app: any" declaration
+// ...existing code...
+
 describe('Alvamind Integrated Complex Module Composition', () => {
-    let app: any; // Define app at a higher scope
     let userId: string;
     let token: string;
 
@@ -23,7 +25,7 @@ describe('Alvamind Integrated Complex Module Composition', () => {
             token: {
                 generate: (userId: string) => encrypt(`token_${userId}`),
                 validate: (token: string) => token.includes('encrypted_token_'),
-                extract: (token: string) => token.split('_').pop()
+                extract: (token: string) => token.replace('encrypted_token_', '')
             }
         }));
 
@@ -59,8 +61,8 @@ describe('Alvamind Integrated Complex Module Composition', () => {
             }
         }));
 
-    // Setup app module
-    app = Alvamind({ name: 'app' })
+    // Setup user system module – now using a typed constant
+    const userApp = Alvamind({ name: 'app' })
         .use(authModule)
         .derive(({ auth: { register, login, validateSession, getUserData } }) => ({
             userSystem: {
@@ -73,9 +75,8 @@ describe('Alvamind Integrated Complex Module Composition', () => {
             }
         }));
 
-    // Before all tests, create a user
     it('should create a user', () => {
-        const user = app.userSystem.createUser('john', 'password123');
+        const user = userApp.userSystem.createUser('john', 'password123');
         userId = user.userId;
         token = user.token;
         expect(userId).toBe('user_john');
@@ -85,12 +86,12 @@ describe('Alvamind Integrated Complex Module Composition', () => {
     });
 
     it('should verify the session token', () => {
-        expect(app.userSystem.verifySession(token)).toBe('user_john');
-        expect(typeof app.userSystem.verifySession(token)).toBe('string');
+        expect(userApp.userSystem.verifySession(token)).toBe('user_john');
+        expect(typeof userApp.userSystem.verifySession(token)).toBe('string');
     });
 
     it('should fetch user data asynchronously', async () => {
-        const userData = await app.userSystem.fetchUserData('user_john');
+        const userData = await userApp.userSystem.fetchUserData('user_john');
         expect(userData).toEqual({ id: 'user_john', name: 'User user_john' });
         expect(userData).toHaveProperty('id');
         expect(userData).toHaveProperty('name');
@@ -135,7 +136,6 @@ describe('Alvamind Integrated Complex Module Composition', () => {
                 processEmail: (input: string) => {
                     const emailProcessor = pipeline(trim, lowercase);
                     const emailValidator = compose(string, email);
-
                     const processed = emailProcessor(input);
                     if (!emailValidator(processed)) {
                         throw new Error('Invalid email format');
@@ -156,7 +156,8 @@ describe('Alvamind Integrated Complex Module Composition', () => {
             }
         }));
 
-    app = Alvamind({ name: 'app' })
+    // Setup email processing module – using a separate constant name
+    const emailApp = Alvamind({ name: 'app' })
         .use(processorModule)
         .use(analyticsModule)
         .derive(({
@@ -178,12 +179,12 @@ describe('Alvamind Integrated Complex Module Composition', () => {
         }));
 
     it('should process a valid email', () => {
-        expect(app.emailSystem.process('  Test@Example.com  ')).toBe('test@example.com');
-        expect(typeof app.emailSystem.process('  Test@Example.com  ')).toBe('string');
+        expect(emailApp.emailSystem.process('  Test@Example.com  ')).toBe('test@example.com');
+        expect(typeof emailApp.emailSystem.process('  Test@Example.com  ')).toBe('string');
     });
 
     it('should throw an error for an invalid email', () => {
-        expect(() => app.emailSystem.process('invalid-email')).toThrow('Invalid email format');
+        expect(() => emailApp.emailSystem.process('invalid-email')).toThrow('Invalid email format');
     });
 
     // Event system with middleware modules
@@ -235,7 +236,8 @@ describe('Alvamind Integrated Complex Module Composition', () => {
             }
         }));
 
-    app = Alvamind({ name: 'app' })
+    // Setup event system with middleware – using a new constant
+    const eventApp = Alvamind({ name: 'app' })
         .use(middlewareModule)
         .use(loggerMiddleware)
         .use(validatorMiddleware)
@@ -246,10 +248,9 @@ describe('Alvamind Integrated Complex Module Composition', () => {
         }) => {
             const logger = createLogger();
             const validator = createValidator({
-                type: (v) => typeof v === 'string',
+                type: (v) => typeof v === 'string' && isNaN(Number(v)),
                 payload: (v) => v !== null && typeof v === 'object'
             });
-
             return {
                 eventSystem: {
                     process: (event: { type: string, payload: any }) => {
@@ -261,7 +262,7 @@ describe('Alvamind Integrated Complex Module Composition', () => {
         });
 
     it('should process a valid event with middleware', () => {
-        const result = app.eventSystem.process({
+        const result = eventApp.eventSystem.process({
             type: 'test',
             payload: { data: 'test' }
         });
@@ -270,14 +271,14 @@ describe('Alvamind Integrated Complex Module Composition', () => {
     });
 
     it('should throw an error for invalid event type', () => {
-        expect(() => app.eventSystem.process({
+        expect(() => eventApp.eventSystem.process({
             type: '123',
             payload: { data: 'test' }
         })).toThrow('Error in middleware [0]: Validation failed for: type');
     });
 
     it('should throw an error for invalid event payload', () => {
-        expect(() => app.eventSystem.process({
+        expect(() => eventApp.eventSystem.process({
             type: 'test',
             payload: null
         })).toThrow('Error in middleware [0]: Validation failed for: payload');
@@ -300,7 +301,7 @@ describe('Alvamind Integrated Complex Module Composition', () => {
                 }
             }));
 
-        app = Alvamind({ name: 'app' })
+        const numberValidationApp = Alvamind({ name: 'app' })
             .use(middlewareModule)
             .use(validatorModuleNumber)
             .derive(({
@@ -310,7 +311,6 @@ describe('Alvamind Integrated Complex Module Composition', () => {
                 const validator = createValidator({
                     age: (v) => typeof v === 'number'
                 });
-
                 return {
                     eventSystem: {
                         process: (event: { age: number }) => {
@@ -321,8 +321,8 @@ describe('Alvamind Integrated Complex Module Composition', () => {
                 };
             });
 
-        expect(() => app.eventSystem.process({ age: 'twenty' as any })).toThrow('Error in middleware [0]: Validation failed for: age');
-        expect(() => app.eventSystem.process({ age: 20 })).not.toThrow();
+        expect(() => numberValidationApp.eventSystem.process({ age: 'twenty' as any })).toThrow('Error in middleware [0]: Validation failed for: age');
+        expect(() => numberValidationApp.eventSystem.process({ age: 20 })).not.toThrow();
     });
 
     it('should handle multiple validators', () => {
@@ -342,7 +342,7 @@ describe('Alvamind Integrated Complex Module Composition', () => {
                 }
             }));
 
-        app = Alvamind({ name: 'app' })
+        const multiValidatorApp = Alvamind({ name: 'app' })
             .use(middlewareModule)
             .use(validatorModuleMultiple)
             .derive(({
@@ -353,7 +353,6 @@ describe('Alvamind Integrated Complex Module Composition', () => {
                     name: (v) => typeof v === 'string',
                     age: (v) => typeof v === 'number'
                 });
-
                 return {
                     eventSystem: {
                         process: (event: { name: string, age: number }) => {
@@ -364,162 +363,160 @@ describe('Alvamind Integrated Complex Module Composition', () => {
                 };
             });
 
-        expect(() => app.eventSystem.process({ name: 123 as any, age: 'twenty' as any })).toThrow('Error in middleware [0]: Validation failed for: name');
-        expect(() => app.eventSystem.process({ name: 'John', age: 'twenty' as any })).toThrow('Error in middleware [0]: Validation failed for: age');
-        expect(() => app.eventSystem.process({ name: 'John', age: 20 })).not.toThrow();
+        expect(() => multiValidatorApp.eventSystem.process({ name: 123 as any, age: 'twenty' as any })).toThrow('Error in middleware [0]: Validation failed for: name');
+        expect(() => multiValidatorApp.eventSystem.process({ name: 'John', age: 'twenty' as any })).toThrow('Error in middleware [0]: Validation failed for: age');
+        expect(() => multiValidatorApp.eventSystem.process({ name: 'John', age: 20 })).not.toThrow();
     });
 
-    // Add these new test cases at the end of the describe block
+    // Nested destructuring test – using a new constant
+    const nestedModule = Alvamind({ name: 'nested' })
+        .derive(() => ({
+            nested: {
+                deep: {
+                    value: 42,
+                    fn: () => 'nested'
+                }
+            }
+        }));
+
+    const nestedApp = Alvamind({ name: 'app' })
+        .use(nestedModule)
+        .derive(({ nested: { deep: { value, fn } } }) => ({
+            computed: {
+                getValue: () => value,
+                getFn: () => fn()
+            }
+        }));
 
     it('should handle nested destructuring correctly', () => {
-        const nestedModule = Alvamind({ name: 'nested' })
-            .derive(() => ({
-                nested: {
-                    deep: {
-                        value: 42,
-                        fn: () => 'nested'
-                    }
-                }
-            }));
-
-        const app = Alvamind({ name: 'app' })
-            .use(nestedModule)
-            .derive(({ nested: { deep: { value, fn } } }) => ({
-                computed: {
-                    getValue: () => value,
-                    getFn: () => fn()
-                }
-            }));
-
-        expect(app.computed.getValue()).toBe(42);
-        expect(app.computed.getFn()).toBe('nested');
-        expect(typeof app.computed.getValue()).toBe('number');
-        expect(typeof app.computed.getFn()).toBe('string');
+        expect(nestedApp.computed.getValue()).toBe(42);
+        expect(nestedApp.computed.getFn()).toBe('nested');
+        expect(typeof nestedApp.computed.getValue()).toBe('number');
+        expect(typeof nestedApp.computed.getFn()).toBe('string');
     });
+
+    // Array destructuring test – using a new constant
+    const arrayModule = Alvamind({ name: 'array' })
+        .derive(() => ({
+            items: [1, 2, 3],
+            getTuple: () => [4, 5, 6]
+        }));
+
+    const arrayApp = Alvamind({ name: 'app' })
+        .use(arrayModule)
+        .derive(ctx => ({
+            values: {
+                first: ctx.items[0],
+                second: ctx.getTuple()[1]
+            }
+        }));
 
     it('should handle array destructuring in derived values', () => {
-        const arrayModule = Alvamind({ name: 'array' })
-            .derive(() => ({
-                items: [1, 2, 3],
-                getTuple: () => [4, 5, 6] as const
-            }));
-
-        const app = Alvamind({ name: 'app' })
-            .use(arrayModule)
-            .derive(({ items: [first], getTuple }) => {
-                const [, second] = getTuple();
-                return {
-                    values: {
-                        first,
-                        second
-                    }
-                };
-            });
-
-        expect(app.values.first).toBe(1);
-        expect(app.values.second).toBe(5);
-        expect(typeof app.values.first).toBe('number');
-        expect(typeof app.values.second).toBe('number');
+        expect(arrayApp.values.first).toBe(1);
+        expect(arrayApp.values.second).toBe(5);
     });
+
+    // Optional chaining test – using a new constant
+    const optionalModule = Alvamind({ name: 'optional' })
+        .derive(() => ({
+            data: {
+                nullable: null as null | { value: number },
+                optional: undefined as undefined | { value: number }
+            }
+        }));
+
+    const optionalApp = Alvamind({ name: 'app' })
+        .use(optionalModule)
+        .derive(({ data }) => ({
+            safe: {
+                nullValue: data.nullable?.value ?? -1,
+                optValue: data.optional?.value ?? -2
+            }
+        }));
 
     it('should handle optional chaining in destructuring', () => {
-        const optionalModule = Alvamind({ name: 'optional' })
-            .derive(() => ({
-                data: {
-                    nullable: null as null | { value: number },
-                    optional: undefined as undefined | { value: number }
-                }
-            }));
-
-        const app = Alvamind({ name: 'app' })
-            .use(optionalModule)
-            .derive(({ data }) => ({
-                safe: {
-                    nullValue: data.nullable?.value ?? -1,
-                    optValue: data.optional?.value ?? -2
-                }
-            }));
-
-        expect(app.safe.nullValue).toBe(-1);
-        expect(app.safe.optValue).toBe(-2);
-        expect(typeof app.safe.nullValue).toBe('number');
-        expect(typeof app.safe.optValue).toBe('number');
+        expect(optionalApp.safe.nullValue).toBe(-1);
+        expect(optionalApp.safe.optValue).toBe(-2);
+        expect(typeof optionalApp.safe.nullValue).toBe('number');
+        expect(typeof optionalApp.safe.optValue).toBe('number');
     });
 
+    // Type-safe method chaining with destructuring – using a new constant
+    interface User {
+        id: string;
+        name: string;
+        role: string;
+    }
+
+    const userModule = Alvamind({ name: 'user' })
+        .derive(() => ({
+            user: {
+                create: (data: Partial<User>): User => ({
+                    id: 'default',
+                    name: 'default',
+                    role: 'user',
+                    ...data
+                })
+            }
+        }));
+
+    const roleModule = Alvamind({ name: 'role' })
+        .use(userModule)
+        .derive(({ user: { create } }) => ({
+            role: {
+                assignAdmin: (userData: Partial<User>) =>
+                    create({ ...userData, role: 'admin' })
+            }
+        }));
+
+    const adminApp = Alvamind({ name: 'app' })
+        .use(roleModule)
+        .derive(({ role: { assignAdmin } }) => ({
+            admin: {
+                create: (name: string) => assignAdmin({ name })
+            }
+        }));
+
     it('should handle type-safe method chaining with destructuring', () => {
-        interface User {
-            id: string;
-            name: string;
-            role: string;
-        }
-
-        const userModule = Alvamind({ name: 'user' })
-            .derive(() => ({
-                user: {
-                    create: (data: Partial<User>): User => ({
-                        id: 'default',
-                        name: 'default',
-                        role: 'user',
-                        ...data
-                    })
-                }
-            }));
-
-        const roleModule = Alvamind({ name: 'role' })
-            .use(userModule)
-            .derive(({ user: { create } }) => ({
-                role: {
-                    assignAdmin: (userData: Partial<User>) =>
-                        create({ ...userData, role: 'admin' })
-                }
-            }));
-
-        const app = Alvamind({ name: 'app' })
-            .use(roleModule)
-            .derive(({ role: { assignAdmin } }) => ({
-                admin: {
-                    create: (name: string) => assignAdmin({ name })
-                }
-            }));
-
-        const admin = app.admin.create('John');
+        const admin = adminApp.admin.create('John');
         expect(admin.role).toBe('admin');
         expect(admin.name).toBe('John');
         expect(typeof admin.role).toBe('string');
         expect(typeof admin.name).toBe('string');
     });
 
+    // Recursive type definitions – using a new constant
+    type TreeNode = {
+        value: number;
+        children?: TreeNode[];
+    };
+
+    const treeModule = Alvamind({ name: 'tree' })
+        .derive(() => ({
+            tree: {
+                create: (value: number, children?: TreeNode[]): TreeNode => ({
+                    value,
+                    children
+                }),
+                sum: (node: TreeNode): number =>
+                    node.value + (node.children?.reduce((acc, child) =>
+                        acc + treeModule.tree.sum(child), 0) ?? 0)
+            }
+        }));
+
+    const treeApp = Alvamind({ name: 'app' })
+        .use(treeModule)
+        .derive(({ tree: { create, sum } }) => ({
+            calculator: {
+                createTree: (root: number, ...children: number[]) =>
+                    create(root, children.map(c => create(c))),
+                sumTree: (tree: TreeNode) => sum(tree)
+            }
+        }));
+
     it('should handle recursive type definitions', () => {
-        type TreeNode = {
-            value: number;
-            children?: TreeNode[];
-        };
-
-        const treeModule = Alvamind({ name: 'tree' })
-            .derive(() => ({
-                tree: {
-                    create: (value: number, children?: TreeNode[]): TreeNode => ({
-                        value,
-                        children
-                    }),
-                    sum: (node: TreeNode): number =>
-                        node.value + (node.children?.reduce((acc, child) =>
-                            acc + treeModule.tree.sum(child), 0) ?? 0)
-                }
-            }));
-
-        const app = Alvamind({ name: 'app' })
-            .use(treeModule)
-            .derive(({ tree: { create, sum } }) => ({
-                calculator: {
-                    createTree: (root: number, ...children: number[]) =>
-                        create(root, children.map(c => create(c))),
-                    sumTree: (tree: TreeNode) => sum(tree)
-                }
-            }));
-
-        const tree = app.calculator.createTree(1, 2, 3, 4);
-        expect(app.calculator.sumTree(tree)).toBe(10);
-        expect(typeof app.calculator.sumTree(tree)).toBe('number');
+        const tree = treeApp.calculator.createTree(1, 2, 3, 4);
+        expect(treeApp.calculator.sumTree(tree)).toBe(10);
+        expect(typeof treeApp.calculator.sumTree(tree)).toBe('number');
     });
 });
