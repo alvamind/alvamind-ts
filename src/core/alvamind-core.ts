@@ -18,8 +18,9 @@ export type State<T> = Readonly<{
   remove: (fn: StateListener<T>) => void;
 }>;
 
-// Update Methods type to handle nested functions better
-type Methods<T = never> = Record<string, Fn | Record<string, Fn> | T>;
+// Update Methods type to allow any value
+type AnyValue = any;
+type Methods<T = never> = Record<string, AnyValue | Record<string, AnyValue> | T>;
 
 // Modify Instance type to better handle method inheritance
 type Instance<S, C, M extends Methods> = Omit<Core<S, C, M>, keyof M> & Partial<M>;
@@ -55,6 +56,9 @@ export type Core<S = {}, C = {}, M extends Methods = Methods> = Readonly<{
 const statePool = new WeakMap<object, State<any>>();
 const methodsCache = new WeakMap<Fn, Methods<any>>();
 
+// Add moduleCache for persistent state between compositions
+const moduleCache = new Map<string, any>();
+
 const createState = <T extends object>(init: T): State<T> => {
   const cached = statePool.get(init);
   if (cached) return cached;
@@ -88,14 +92,47 @@ const createState = <T extends object>(init: T): State<T> => {
   return state;
 };
 
+const CORE_METHODS = [
+  'state', 'config', 'inject', 'derive', 'watch',
+  'use', 'decorate', 'pipe', 'flow', 'start',
+  'onStart', 'onStop', 'stop'
+] as const;
+
 const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
   state: State<S>,
   config: C,
-  id = Date.now()
+  id = Date.now(),
+  name?: string
 ): Core<S, C, M> => {
+  // Use cached instance if available
+  if (name && moduleCache.has(name)) {
+    return moduleCache.get(name);
+  }
+
   const methods = new Map<string, any>();
   const stops: Fn[] = [];
   let started = false;
+
+  // Improved deep merge helper
+  const deepMerge = (target: any, source: any): any => {
+    if (typeof source !== 'object' || source === null) return source;
+    const merged = { ...target };
+    Object.entries(source).forEach(([key, value]) => {
+      if (typeof value === 'object' && value !== null) {
+        merged[key] = deepMerge(merged[key] || {}, value);
+      } else {
+        merged[key] = value;
+      }
+    });
+    return merged;
+  };
+
+  // Filter core methods from module
+  const filterCoreMethods = (module: any): Methods => {
+    const filtered = { ...module };
+    CORE_METHODS.forEach(method => delete filtered[method]);
+    return filtered;
+  };
 
   const flow: Flow = (...fns: Fn[]) => {
     return (...args: any[]) => {
@@ -106,8 +143,20 @@ const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
 
   const baseCtx = { state, config, id, flow };
 
-  // Helper functions for DRY context creation
-  const coreCtx = () => ({ ...baseCtx, ...Object.fromEntries(methods) } as CoreCtx<S, C, M>);
+  // Improved context creation with deep merging
+  const mergeContexts = (base: any, entries: [string, any][]) => {
+    const merged = { ...base };
+    entries.forEach(([key, value]) => {
+      if (typeof value === 'object' && value !== null) {
+        merged[key] = { ...(merged[key] || {}), ...value };
+      } else {
+        merged[key] = value;
+      }
+    });
+    return merged;
+  };
+
+  const coreCtx = () => mergeContexts(baseCtx, Array.from(methods.entries())) as CoreCtx<S, C, M>;
   const pipeCtx = () => ({
     ...coreCtx(),
     pipe: (input: any, ...fns: Array<(arg: any) => any>) => fns.reduce((acc, fn) => fn(acc), input)
@@ -116,17 +165,16 @@ const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
   const instance = {
     ...baseCtx,
     inject<T extends Methods>(m: T) {
-      Object.entries(m).forEach(([k, v]) => methods.set(k, v as any));
-      return this as any as Core<S, C, M & T>;
+      const filtered = filterCoreMethods(m);
+      Object.entries(filtered).forEach(([k, v]) => {
+        methods.set(k, typeof v === 'object' ? deepMerge(methods.get(k) || {}, v) : v);
+      });
+      return Object.assign(this, Object.fromEntries(methods)) as any as Core<S, C, M & T>;
     },
     derive<D extends Methods>(fn: (c: CoreCtx<S, C, M>) => D) {
-      const cached = methodsCache.get(fn) ?? (() => {
-        const derived = fn(coreCtx());
-        methodsCache.set(fn, derived);
-        Object.entries(derived).forEach(([k, v]) => methods.set(k, v));
-        return derived;
-      })();
-      return Object.assign(this, cached) as unknown as Core<S, C, M & D>;
+      const derived = methodsCache.get(fn) ?? fn(coreCtx());
+      methodsCache.set(fn, derived);
+      return this.inject(derived);
     },
     watch<K extends keyof S>(k: K, fn: (n: S[K], p: S[K]) => void) {
       state.add((n, p) => n[k] !== p[k] && fn(n[k], p[k]));
@@ -150,6 +198,9 @@ const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
       return Object.assign(this, { [n]: flowFunction }) as any as Core<S, C, M & Record<N, F>>;
     },
     start() {
+      if (name) {
+        moduleCache.set(name, this);
+      }
       return this as unknown as Core<S, C, M>;
     },
     onStart(fn: (c: CoreCtx<S, C, M>) => void) {
@@ -168,10 +219,19 @@ const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
     }
   } as unknown as Instance<S, C, M>;
 
-  return instance as unknown as Core<S, C, M>;
+  const finalInstance = instance as unknown as Core<S, C, M>;
+  if (name) {
+    moduleCache.set(name, finalInstance);
+  }
+  return finalInstance;
 };
 
 export default <S extends object = {}, C = {}>(opts: { name: string; state?: S; config?: C }): Core<S, C> => {
   if (!opts.name) throw new Error('Name required');
-  return create(createState(opts.state ?? {} as S), opts.config ?? {} as C);
+  return create(
+    createState(opts.state ?? {} as S),
+    opts.config ?? {} as C,
+    Date.now(),
+    opts.name
+  );
 };
