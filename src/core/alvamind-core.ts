@@ -56,8 +56,9 @@ export type Core<S = {}, C = {}, M extends Methods = Methods> = Readonly<{
 const statePool = new WeakMap<object, State<any>>();
 const methodsCache = new WeakMap<Fn, Methods<any>>();
 
-// Add moduleCache for persistent state between compositions
-const moduleCache = new Map<string, any>();
+// Replace moduleCache with WeakMap for better garbage collection
+const moduleCache = new WeakMap<object, any>();
+const moduleKeys = new Map<string, object>();
 
 const createState = <T extends object>(init: T): State<T> => {
   const cached = statePool.get(init);
@@ -104,27 +105,33 @@ const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
   id = Date.now(),
   name?: string
 ): Core<S, C, M> => {
-  // Use cached instance if available
-  if (name && moduleCache.has(name)) {
-    return moduleCache.get(name);
+  // Use module key to maintain reference
+  if (name) {
+    const moduleKey = moduleKeys.get(name) || {};
+    moduleKeys.set(name, moduleKey);
+
+    const cached = moduleCache.get(moduleKey);
+    if (cached) return cached;
   }
 
   const methods = new Map<string, any>();
   const stops: Fn[] = [];
   let started = false;
 
-  // Improved deep merge helper
-  const deepMerge = (target: any, source: any): any => {
-    if (typeof source !== 'object' || source === null) return source;
-    const merged = { ...target };
-    Object.entries(source).forEach(([key, value]) => {
-      if (typeof value === 'object' && value !== null) {
-        merged[key] = deepMerge(merged[key] || {}, value);
-      } else {
-        merged[key] = value;
-      }
-    });
-    return merged;
+  // Track initialization state to prevent circular dependency loops
+  let isInitializing = false;
+  let pendingDeps = new Set<string>();
+
+  // Modified safeMerge to handle undefined properties
+  const safeMerge = (target: any, source: any): any => {
+    if (typeof source !== 'object' || source === null) {
+      return source ?? target;
+    }
+    const result = { ...target };
+    for (const key in source) {
+      result[key] = source[key] ?? target?.[key];
+    }
+    return result;
   };
 
   // Filter core methods from module
@@ -163,14 +170,31 @@ const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
     inject<T extends Methods>(m: T) {
       const filtered = filterCoreMethods(m);
       Object.entries(filtered).forEach(([k, v]) => {
-        methods.set(k, typeof v === 'object' ? deepMerge(methods.get(k) || {}, v) : v);
+        if (pendingDeps.has(k)) {
+          // Skip circular references during initialization
+          return;
+        }
+        methods.set(k, typeof v === 'object' ? safeMerge(methods.get(k) || {}, v) : v);
       });
       return Object.assign(this, Object.fromEntries(methods)) as any as Core<S, C, M & T>;
     },
     derive<D extends Methods>(this: Core<S, C, M>, fn: (c: CoreCtx<S, C, M>) => D) {
-      const derived = methodsCache.get(fn) ?? fn(coreCtx());
-      methodsCache.set(fn, derived);
-      return this.inject(derived);
+      if (isInitializing) {
+        // Return empty object for circular dependencies during initialization
+        return this as any;
+      }
+      isInitializing = true;
+      try {
+        const ctx = coreCtx();
+        const derived = methodsCache.get(fn) ?? fn(ctx);
+        methodsCache.set(fn, derived);
+        const result = this.inject(derived);
+        isInitializing = false;
+        return result;
+      } catch (e) {
+        isInitializing = false;
+        throw e;
+      }
     },
     watch<K extends keyof S>(k: K, fn: (n: S[K], p: S[K]) => void) {
       state.add((n, p) => n[k] !== p[k] && fn(n[k], p[k]));
@@ -195,7 +219,8 @@ const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
     },
     start() {
       if (name) {
-        moduleCache.set(name, this);
+        const moduleKey = moduleKeys.get(name)!;
+        moduleCache.set(moduleKey, this);
       }
       return this as unknown as Core<S, C, M>;
     },
@@ -216,9 +241,13 @@ const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
   } as unknown as Instance<S, C, M>;
 
   const finalInstance = instance as unknown as Core<S, C, M>;
+
+  // Cache using WeakMap
   if (name) {
-    moduleCache.set(name, finalInstance);
+    const moduleKey = moduleKeys.get(name)!;
+    moduleCache.set(moduleKey, finalInstance);
   }
+
   return finalInstance;
 };
 
