@@ -167,7 +167,7 @@ const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
       });
       return Object.assign(this, Object.fromEntries(methods)) as any as Core<S, C, M & T>;
     },
-    derive<D extends Methods>(fn: (c: CoreCtx<S, C, M>) => D) {
+    derive<D extends Methods>(this: Core<S, C, M>, fn: (c: CoreCtx<S, C, M>) => D) {
       const derived = methodsCache.get(fn) ?? fn(coreCtx());
       methodsCache.set(fn, derived);
       return this.inject(derived);
