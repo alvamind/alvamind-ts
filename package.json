@@ -1,6 +1,6 @@
 {
   "name": "alvamind",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "description": "A lightweight state management library",
   "keywords": [
     "state-management",
@@ -9,14 +9,16 @@
   "type": "module",
   "author": "",
   "license": "MIT",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alvamind/alvamind-ts.git"
   },
   "exports": {
     ".": {
+      "require": "./dist/index.js",
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     }
