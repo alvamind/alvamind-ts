@@ -52,6 +52,9 @@ export type Core<S = {}, C = {}, M extends Methods = Methods> = Readonly<{
   stop: () => void;
 }> & M;
 
+// Add new type alias for public API
+export type AlvamindInstance<S = {}, C = {}, M extends Methods = Methods> = Core<S, C, M>;
+
 // Optimized implementation
 const statePool = new WeakMap<object, State<any>>();
 const methodsCache = new WeakMap<Fn, Methods<any>>();
