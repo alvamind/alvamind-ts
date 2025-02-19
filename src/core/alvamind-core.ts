@@ -1,10 +1,10 @@
 // Ultra-Optimized Alvamind Core (v2.0)
 
 // Core types
-export type Fn<A extends any[] = any[], R = any> = (...args: A) => R;
+export type Fn<A extends unknown[] = unknown[], R = unknown> = (...args: A) => R;
 type UnaryFunction<T, R> = (arg: T) => R;
 
-export type Flow = <A extends any[], B, C>(
+export type Flow = <A extends unknown[], B, C>(
   f1: (...args: A) => B,
   ...fns: Array<UnaryFunction<B, C>>
 ) => (...args: A) => C;
@@ -19,8 +19,9 @@ export type State<T> = Readonly<{
 }>;
 
 // Update Methods type to allow any value
-type AnyValue = any;
-type Methods<T = never> = Record<string, AnyValue | Record<string, AnyValue> | T>;
+type AnyValue = unknown;
+// only declared properties are allowed
+export interface Methods { }
 
 // Modify Instance type to better handle method inheritance
 type Instance<S, C, M extends Methods> = Omit<Core<S, C, M>, keyof M> & Partial<M>;
@@ -36,7 +37,7 @@ type PipeCtx<S, C, M extends Methods> = BaseCtx<S, C, M> & {
   pipe: <T, R>(input: T, ...fns: Array<(arg: any) => any>) => R
 };
 
-export type Core<S = {}, C = {}, M extends Methods = Methods> = Readonly<{
+export type Core<S = {}, C = {}, M extends Methods = {}> = Readonly<{
   state: State<S>;
   config: C;
   inject: <T extends Methods>(m: T) => Core<S, C, M & T>;
@@ -53,11 +54,12 @@ export type Core<S = {}, C = {}, M extends Methods = Methods> = Readonly<{
 }> & M;
 
 // Add new type alias for public API
-export type AlvamindInstance<S = {}, C = {}, M extends Methods = Methods> = Core<S, C, M>;
+export type AlvamindInstance<S = {}, C = {}, M extends Methods = {}> = Core<S, C, M>;
 
 // Optimized implementation
 const statePool = new WeakMap<object, State<any>>();
-const methodsCache = new WeakMap<Fn, Methods<any>>();
+// Update methodsCache type to handle generic function types
+const methodsCache = new WeakMap<Function, Methods>();
 
 // Replace moduleCache with WeakMap for better garbage collection
 const moduleCache = new WeakMap<object, any>();
@@ -102,7 +104,7 @@ const CORE_METHODS = [
   'onStart', 'onStop', 'stop'
 ] as const;
 
-const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
+const create = <S extends object = {}, C = {}, M extends Methods = {}>(
   state: State<S>,
   config: C,
   id = Date.now(),
@@ -152,12 +154,13 @@ const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
     return filtered;
   };
 
-  const flow: Flow = (...fns: Fn[]) => {
+  // Modified flow: cast the function to Flow
+  const flow = ((...fns: Fn[]) => {
     return (...args: any[]) => {
       const [first, ...rest] = fns;
       return rest.reduce((result, fn) => fn(result), first(...args));
     };
-  };
+  }) as Flow;
 
   const baseCtx = { state, config, id, flow };
 
@@ -194,15 +197,9 @@ const create = <S extends object = {}, C = {}, M extends Methods = Methods>(
       isInitializing = true;
       try {
         const ctx = coreCtx();
-        // Add safe default for uninitialized dependencies
-        const safeCtx = new Proxy(ctx, {
-          get: (target, prop) => {
-            if (prop in target) return target[prop as keyof typeof target];
-            return {}; // Return empty object for uninitialized deps
-          }
-        });
-        const derived = methodsCache.get(fn) ?? fn(safeCtx);
-        methodsCache.set(fn, derived);
+        const cached = methodsCache.get(fn as Function);
+        const derived = cached ?? fn(ctx);
+        methodsCache.set(fn as Function, derived);
         const result = this.inject(derived);
         isInitializing = false;
         return result;

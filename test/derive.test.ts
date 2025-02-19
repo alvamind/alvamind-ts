@@ -1,8 +1,5 @@
 import { expect, it, describe } from "bun:test";
-import Alvamind from "../src/core/alvamind-core";
-
-// Remove the global "let app: any" declaration
-// ...existing code...
+import Alvamind, { AlvamindInstance } from "../src/core/alvamind-core";
 
 describe('Alvamind Integrated Complex Module Composition', () => {
     let userId: string;
